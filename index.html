@@ -76,8 +76,24 @@
         };
 
         // --- Firebase Config & App State ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        // This line attempts to use the built-in config from the environment.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config)
+            : { apiKey: "PLACEHOLDER", authDomain: "PLACEHOLDER.firebaseapp.com", projectId: "PLACEHOLDER" }; // Fallback for safety
+
+        // If you move this file to GitHub, the __firebase_config will be undefined.
+        // You MUST replace the above with your own firebaseConfig object from firebase.google.com
+        // as explained in the previous message.
+        //
+        // Example for GitHub:
+        // const firebaseConfig = {
+        //    apiKey: "AIza...",
+        //    authDomain: "my-budget.firebaseapp.com",
+        //    ...
+        // };
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // This 'appId' is for the database path, not Firebase config.
 
         let auth, db;
         
@@ -975,6 +991,19 @@
         /** Main entry point */
         function initialize() {
             try {
+                // Add a check for a valid config
+                if (!firebaseConfig || firebaseConfig.apiKey === "PLACEHOLDER") {
+                    appRoot.innerHTML = `<div class="p-4 m-4 bg-red-100 text-red-800 rounded-lg">
+                        <strong>Error:</strong> Firebase configuration is missing. 
+                        <br><br>
+                        This app cannot run in this environment without a valid configuration.
+                        <br><br>
+                        If you are the developer, please follow the instructions in the code to create your own Firebase project and paste the 'firebaseConfig' object into the HTML file.
+                    </div>`;
+                    console.error("Firebase config is just a placeholder. Halting app initialization.");
+                    return;
+                }
+
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
