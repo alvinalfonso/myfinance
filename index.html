@@ -48,8 +48,7 @@
             onAuthStateChanged,
             signOut,
             GoogleAuthProvider,
-            signInWithRedirect, // Use Redirect
-            getRedirectResult   // Use Redirect
+            signInWithPopup // Reverted to Popup
         } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
         import { 
             getFirestore, 
@@ -158,13 +157,7 @@
         function renderApp() {
             // If user is not logged in, show the login screen.
             if (!state.isAuthReady) {
-                // We're either loading the redirect result or showing login
-                // Don't show login screen until we're sure the redirect result is processed
-                if (state.loading) {
-                    appRoot.innerHTML = renderLoadingScreen();
-                } else {
-                    renderLoginScreen();
-                }
+                renderLoginScreen();
                 return;
             }
             
@@ -759,11 +752,38 @@
         /** NEW: Handles Google Sign-In */
         async function handleGoogleSignIn() {
             try {
-                // This will redirect the user to the Google sign-in page
-                await signInWithRedirect(auth, googleProvider);
-                // The page will reload, and getRedirectResult will handle the login
+                // This will open the Google sign-in popup
+                const result = await signInWithPopup(auth, googleProvider);
+                // onAuthStateChanged will handle the successful login
+                console.log("Signed in with Google:", result.user.uid);
             } catch (error) {
-                console.error("Error starting Google sign-in redirect:", error);
+                console.error("Error during Google sign-in popup:", error);
+                
+                // Handle common errors
+                if (error.code === 'auth/popup-closed-by-user') {
+                    // User closed the popup, do nothing
+                    return;
+                }
+                if (error.code === 'auth/unauthorized-domain') {
+                    // This is a common setup error
+                    appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                        <h2 class="text-2xl font-bold">Sign-In Error</h2>
+                        <p class="mt-2">This domain is not authorized to sign in. You must add it to the Firebase console.</p>
+                        <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
+                            <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
+                                <li>Go to your Firebase project console.</li>
+                                <li>Click on <strong>Build > Authentication</strong>.</li>
+                                <li>Click the <strong>Settings</strong> tab.</li>
+                                <li>Under <strong>Authorized domains</strong>, click <strong>Add domain</strong>.</li>
+                                <li>Add this domain: <code>${window.location.hostname}</code></li>
+                                <li>Click <strong>Add</strong>.</li>
+                            </ol>
+                        </p>
+                    </div>`;
+                    return;
+                }
+                
+                // Show a generic error for other issues
                 appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
                         <h2 class="text-2xl font-bold">Sign-In Error</h2>
                         <p class="mt-2">${error.message}</p>
@@ -1095,27 +1115,6 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
                 googleProvider = new GoogleAuthProvider(); // Initialize Google provider
-                
-                // --- REDIRECT FIX ---
-                // First, check if we are returning from a redirect
-                try {
-                    const result = await getRedirectResult(auth);
-                    if (result && result.user) {
-                        // User has just signed in via redirect.
-                        // onAuthStateChanged will handle the rest.
-                        console.log("Signed in via redirect:", result.user.uid);
-                    }
-                    // If result is null, it means we are not returning from a redirect.
-                    // Now, we let onAuthStateChanged take over.
-                    
-                } catch (error) {
-                    // Handle redirect errors
-                    console.error("Error getting redirect result:", error);
-                    state.loading = false;
-                    renderLoginScreen();
-                }
-                
-                // --- End Redirect Fix ---
                 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
