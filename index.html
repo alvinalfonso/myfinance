@@ -68,7 +68,6 @@
             trendingUp: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>`,
             settings: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73v.18a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>`,
             logOut: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>`,
-            copy: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>`,
             dollarSign: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 mr-1"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>`,
             creditCard: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 mr-1"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>`,
             plus: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
@@ -86,7 +85,7 @@
             apiKey: "AIzaSyDllC4nXTDgtMMfw6CO0t92j820SOY7MPQ",
             authDomain: "my-budget-tracker-23b15.firebaseapp.com",
             projectId: "my-budget-tracker-23b15",
-            storageBucket: "my-budget-tracker-23b15.firebasestorage.app", // Using the one you provided
+            storageBucket: "my-budget-tracker-23b15.firebasestorage.app",
             messagingSenderId: "341614311933",
             appId: "1:341614311933:web:32b48db5576be8d7fb0194",
             measurementId: "G-44L5LDN7MW"
@@ -191,12 +190,6 @@
 
             appRoot.innerHTML = `
                 ${nav}
-                <div class="p-4 m-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                    <span class="font-medium">Your User ID:</span> ${state.userId}
-                    <button id="copy-user-id" class="ml-2 p-1 text-blue-600 hover:bg-blue-200 rounded-md" title="Copy User ID">
-                        ${icons.copy}
-                    </button>
-                </div>
                 <main class="p-4 md:p-8">
                     ${mainContent}
                 </main>
@@ -761,25 +754,6 @@
                     btn.onclick = (e) => handleTemplateDelete(e.currentTarget.dataset.key, e.currentTarget.dataset.id);
                 });
             }
-            
-            const copyBtn = document.getElementById('copy-user-id');
-            if (copyBtn) {
-                copyBtn.onclick = () => {
-                     try {
-                        const input = document.createElement('input');
-                        input.value = state.userId;
-                        document.body.appendChild(input);
-                        input.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(input);
-                        
-                        copyBtn.innerHTML = 'Copied!';
-                        setTimeout(() => { copyBtn.innerHTML = icons.copy; }, 1500);
-                    } catch (err) {
-                        console.error('Failed to copy user ID.');
-                    }
-                };
-            }
         }
         
         /** NEW: Handles Google Sign-In */
@@ -793,7 +767,7 @@
                 appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
                         <h2 class="text-2xl font-bold">Sign-In Error</h2>
                         <p class="mt-2">${error.message}</p>
-                        <p class="mt-4 text-sm text-gray-700">Please try again.</p>
+                        <p class="mt-4 text-sm text-gray-700">Please try again. Make sure popups are enabled for this site.</p>
                     </div>`;
             }
         }
