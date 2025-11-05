@@ -45,9 +45,10 @@
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-analytics.js";
         import { 
             getAuth, 
-            signInAnonymously, 
             onAuthStateChanged,
-            signOut // Import signOut
+            signOut,
+            GoogleAuthProvider, // Import Google Auth
+            signInWithPopup     // Import Popup Sign-in
         } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
         import { 
             getFirestore, 
@@ -61,7 +62,6 @@
         } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
         
         // --- Lucide Icons (as functions) ---
-        // We can't import 'lucide-react', so we'll use SVG strings.
         const icons = {
             home: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`,
             trendingUp: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>`,
@@ -74,7 +74,8 @@
             trash2: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
             calendarDays: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 mr-1"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>`,
             clipboardEdit: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M14.39 16.61.7 10.93a1 1 0 0 1 0-1.42l.7-.7a1 1 0 0 1 1.42 0l5.66 5.66"></path><path d="m14 17 5.66-5.66a1 1 0 0 1 1.42 0l.7.7a1 1 0 0 1 0 1.42L15.42 19.5a1 1 0 0 1-1.42 0"></path></svg>`,
-            x: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
+            x: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+            google: `<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-2"><title>Google</title><path d="M12.48 10.92v3.28h7.84c-.24 1.54-.88 2.76-1.9 3.55l2.6 2.04c2-1.84 3.22-4.48 3.22-7.58 0-5.74-4.42-10.4-10-10-5.52 0-10 4.48-10 10s4.48 10 10 10c2.18 0 4.16-.76 5.74-2.04l-2.6-2.04c-.6.44-1.48.76-2.6.76-3.3 0-6-2.68-6-6s2.7-6 6-6c1.66 0 3.14.68 4.2 1.72l2.54-2.54C16.6 2.76 14.58 2 12.48 2z" fill="#4285F4"></path></svg>`
         };
 
         // --- Firebase Config & App State ---
@@ -93,7 +94,7 @@
         // This 'appId' is for the database path, not Firebase config.
         const appId = 'default-app-id'; // Use a stable ID for your GitHub Pages app
 
-        let auth, db, app, analytics;
+        let auth, db, app, analytics, googleProvider;
         
         // Global state object
         const state = {
@@ -102,7 +103,7 @@
             settings: null,
             currentBudget: null,
             userId: null,
-            isAuthReady: false,
+            isAuthReady: false, // This now means "is user logged in?"
             loading: true,
             unsubSettings: () => {},
             unsubBudget: () => {},
@@ -133,10 +134,36 @@
         }
 
         // --- Render Functions ---
+
+        /** Renders the new Login Screen */
+        function renderLoginScreen() {
+             appRoot.innerHTML = `
+                <div class="flex items-center justify-center min-h-screen bg-gray-100">
+                    <div class="bg-white shadow-xl rounded-lg p-8 w-full max-w-md mx-4 text-center">
+                        <h2 class="text-2xl font-bold text-blue-700 mb-4">Welcome to Your Budget Tracker</h2>
+                        <p class="text-sm text-gray-600 mb-8">
+                            Sign in with your Google account to securely access and sync your budget.
+                        </p>
+                        <button id="google-signin-button" class="w-full font-medium rounded-lg transition-colors bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 shadow-sm px-4 py-3 text-base flex items-center justify-center">
+                            ${icons.google}
+                            Sign in with Google
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('google-signin-button').onclick = handleGoogleSignIn;
+        }
         
         /** Renders the entire application based on the current state */
         function renderApp() {
-            if (!state.isAuthReady || state.loading) {
+            // If user is not logged in, show the login screen.
+            if (!state.isAuthReady) {
+                renderLoginScreen();
+                return;
+            }
+            
+            // If user is logged in, but data is loading, show loading screen.
+            if (state.loading) {
                 appRoot.innerHTML = renderLoadingScreen();
                 return;
             }
@@ -672,14 +699,13 @@
                 };
             });
             document.getElementById('sign-out-button').onclick = async () => {
-                await signOut(auth);
-                // On GitHub Pages, we can't just re-sign in anonymously easily without
-                // a full page reload or more complex state management.
-                // For simplicity, we'll just clear the state and show a signed-out message.
-                state.isAuthReady = false;
-                state.userId = null;
-                appRoot.innerHTML = `<div class="p-8 text-center">You have been signed out. Please refresh the page to sign back in.</div>`;
-                console.log("User signed out.");
+                try {
+                    await signOut(auth);
+                    // onAuthStateChanged will handle the redirect to login
+                    console.log("User signed out.");
+                } catch (error) {
+                    console.error("Error signing out:", error);
+                }
             };
         }
 
@@ -749,6 +775,25 @@
             }
         }
         
+        /** NEW: Handles Google Sign-In */
+        async function handleGoogleSignIn() {
+            try {
+                await signInWithPopup(auth, googleProvider);
+                // onAuthStateChanged will handle loading the app
+            } catch (error) {
+                console.error("Error signing in with Google:", error);
+                if (error.code === 'auth/popup-closed-by-user') {
+                    // Do nothing, user just closed the popup
+                } else {
+                     appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                        <h2 class="text-2xl font-bold">Sign-In Error</h2>
+                        <p class="mt-2">${error.message}</p>
+                        <p class="mt-4 text-sm text-gray-700">Please try again. Make sure popups are enabled for this site.</p>
+                    </div>`;
+                }
+            }
+        }
+
         // --- Data Logic (Saving/Updating) ---
         
         /** Save payout modal form */
@@ -1019,97 +1064,83 @@
                 }
             });
         }
+        
+        /** Attaches listeners for data (Settings and Budget) */
+        function attachDataListeners() {
+            // 1. Setup settings listener
+            const settingsRef = doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main');
+            state.unsubSettings = onSnapshot(settingsRef, async (docSnap) => {
+                if (docSnap.exists()) {
+                    state.settings = docSnap.data();
+                } else {
+                    // Create default settings
+                    const defaultSettings = {
+                        avgPayout1: 19000,
+                        avgPayout2: 19000,
+                        recurringTemplate: [],
+                        flexibleLoansTemplate: [],
+                    };
+                    await setDoc(settingsRef, defaultSettings);
+                    state.settings = defaultSettings;
+                }
+                // Once settings are loaded, setup budget listener
+                setupBudgetListener(state.currentMonthId);
+            }, (error) => {
+                // Handle settings snapshot errors (likely permission denied)
+                console.error("Error listening to settings:", error);
+                if (error.code === 'permission-denied') {
+                    appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                        <h2 class="text-2xl font-bold">Database Error</h2>
+                        <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
+                        <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
+                            <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
+                                <li>Go to your Firebase project console.</li>
+                                <li>Click on <strong>Build > Firestore Database</strong>.</li>
+                                <li>Click the <strong>Rules</strong> tab.</li>
+                                <li>Change the line <code>allow read, write: if false;</code> to <code>allow read, write: if true;</code></li>
+                                <li>Click <strong>Publish</strong>.</li>
+                            </ol>
+                        </p>
+                    </div>`;
+                }
+            });
+        }
 
         /** Initializes the application */
         async function main() {
-            renderApp(); // Show initial loading screen
+            renderApp(); // Show initial loading screen (which is now login or loading)
             
             try {
                 app = initializeApp(firebaseConfig);
                 analytics = getAnalytics(app);
                 auth = getAuth(app);
                 db = getFirestore(app);
+                googleProvider = new GoogleAuthProvider(); // Initialize Google provider
                 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
+                        // User is signed in!
                         state.userId = user.uid;
                         state.isAuthReady = true;
-
-                        // 1. Setup settings listener
-                        const settingsRef = doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main');
-                        state.unsubSettings = onSnapshot(settingsRef, async (docSnap) => {
-                            if (docSnap.exists()) {
-                                state.settings = docSnap.data();
-                            } else {
-                                // Create default settings
-                                const defaultSettings = {
-                                    avgPayout1: 19000,
-                                    avgPayout2: 19000,
-                                    recurringTemplate: [],
-                                    flexibleLoansTemplate: [],
-                                };
-                                await setDoc(settingsRef, defaultSettings);
-                                state.settings = defaultSettings;
-                            }
-                            // Once settings are loaded, setup budget listener
-                            setupBudgetListener(state.currentMonthId);
-                        }, (error) => {
-                            // Handle settings snapshot errors (likely permission denied)
-                            console.error("Error listening to settings:", error);
-                            if (error.code === 'permission-denied') {
-                                appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
-                                    <h2 class="text-2xl font-bold">Database Error</h2>
-                                    <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
-                                    <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
-                                        <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
-                                            <li>Go to your Firebase project console.</li>
-                                            <li>Click on <strong>Build > Firestore Database</strong>.</li>
-                                            <li>Click the <strong>Rules</strong> tab.</li>
-                                            <li>Change the line <code>allow read, write: if false;</code> to <code>allow read, write: if true;</code></li>
-                                            <li>Click <strong>Publish</strong>.</li>
-                                        </ol>
-                                    </p>
-                                </div>`;
-                            }
-                        });
-
+                        state.loading = true; // Set to loading while we fetch data
+                        
+                        // Detach any old listeners before attaching new ones
+                        state.unsubSettings();
+                        state.unsubBudget();
+                        
+                        attachDataListeners(); // This will fetch data and render the app
+                        
                     } else {
-                        // No user, sign in anonymously
-                        try {
-                            await signInAnonymously(auth);
-                        } catch (authError) {
-                            // Log a very clear, actionable message to the console
-                            console.error("===================================================================");
-                            console.error("APP FIX: This is not a code bug. You MUST enable 'Anonymous' sign-in in your Firebase project.");
-                            console.error("HOW TO FIX: Go to Firebase Console > Build > Authentication > Sign-in method");
-                            console.error("Click 'Anonymous' and 'Enable' it.");
-                            console.error("Refresh this page after enabling.");
-                            console.error("===================================================================");
-                            console.error("Original error details:", authError); // Keep the original log
-                            
-                            // This is the specific error the user is seeing.
-                            if (authError.code === 'auth/configuration-not-found') {
-                                 appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
-                                    <h2 class="text-2xl font-bold">Authentication Error</h2>
-                                    <p class="mt-2">Failed to sign in. You must enable <strong>Anonymous Sign-In</strong> in your Firebase project.</p>
-                                    <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
-                                        <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
-                                            <li>Go to your Firebase project console.</li>
-                                            <li>Click on <strong>Build > Authentication</strong>.</li>
-                                            <li>Go to the <strong>Sign-in method</strong> tab.</li>
-                                            <li>Find <strong>Anonymous</strong> in the list, click it, and enable it.</li>
-                                            <li>Refresh this page.</li>
-                                        </ol>
-                                    </p>
-                                </div>`;
-                            } else {
-                                // Generic auth error
-                                appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
-                                    <h2 class="text-2xl font-bold">Authentication Error</h2>
-                                    <p class="mt-2">${authError.message}</p>
-                                </div>`;
-                            }
-                        }
+                        // User is signed out!
+                        state.userId = null;
+                        state.isAuthReady = false;
+                        state.loading = false;
+                        
+                        // Detach listeners
+                        state.unsubSettings();
+                        state.unsubBudget();
+                        
+                        renderLoginScreen(); // Show the login screen
                     }
                 });
 
@@ -1118,7 +1149,6 @@
                 appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
                     <h2 class="text-2xl font-bold">Error connecting to database</h2>
                     <p class=mt-2>Could not initialize Firebase. Please check your console and Firebase configuration.</p>
-                    <p class="mt-1 text-sm text-gray-700">Did you remember to enable Anonymous Auth and Firestore in your Firebase project?</p>
                 </div>`;
             }
         }
