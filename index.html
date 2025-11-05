@@ -40,13 +40,15 @@
     <!-- 5. Firebase and App Logic -->
     <script type="module">
         // --- Firebase SDK Imports ---
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        // Use the versions you provided
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-analytics.js";
         import { 
             getAuth, 
             signInAnonymously, 
             onAuthStateChanged,
-            signInWithCustomToken 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+            signOut // Import signOut
+        } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
         import { 
             getFirestore, 
             doc, 
@@ -56,7 +58,7 @@
             updateDoc,
             arrayUnion,
             arrayRemove
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
         
         // --- Lucide Icons (as functions) ---
         // We can't import 'lucide-react', so we'll use SVG strings.
@@ -77,25 +79,21 @@
 
         // --- Firebase Config & App State ---
         
-        // This line attempts to use the built-in config from the environment.
-        const firebaseConfig = typeof __firebase_config !== 'undefined' 
-            ? JSON.parse(__firebase_config)
-            : { apiKey: "PLACEHOLDER", authDomain: "PLACEHOLDER.firebaseapp.com", projectId: "PLACEHOLDER" }; // Fallback for safety
+        // This is YOUR personal config that you provided
+        const firebaseConfig = {
+            apiKey: "AIzaSyDllC4nXTDgtMMfw6CO0t92j820SOY7MPQ",
+            authDomain: "my-budget-tracker-23b15.firebaseapp.com",
+            projectId: "my-budget-tracker-23b15",
+            storageBucket: "my-budget-tracker-23b15.firebasestorage.app", // Using the one you provided
+            messagingSenderId: "341614311933",
+            appId: "1:341614311933:web:32b48db5576be8d7fb0194",
+            measurementId: "G-44L5LDN7MW"
+        };
+        
+        // This 'appId' is for the database path, not Firebase config.
+        const appId = 'default-app-id'; // Use a stable ID for your GitHub Pages app
 
-        // If you move this file to GitHub, the __firebase_config will be undefined.
-        // You MUST replace the above with your own firebaseConfig object from firebase.google.com
-        // as explained in the previous message.
-        //
-        // Example for GitHub:
-        // const firebaseConfig = {
-        //    apiKey: "AIza...",
-        //    authDomain: "my-budget.firebaseapp.com",
-        //    ...
-        // };
-
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // This 'appId' is for the database path, not Firebase config.
-
-        let auth, db;
+        let auth, db, app, analytics;
         
         // Global state object
         const state = {
@@ -567,30 +565,30 @@
 
         // --- Modal & Form Logic ---
 
-        /** Shows the modal with custom content */
+        /** Shows the modal with specific content */
         function showModal(content) {
             modalContent.innerHTML = content;
             modalContainer.classList.remove('hidden');
         }
 
         /** Hides the modal */
-        function closeModal() {
-            modalContainer.classList.add('hidden');
+        function hideModal() {
             modalContent.innerHTML = '';
+            modalContainer.classList.add('hidden');
         }
-        
-        /** Shows modal for editing a payout */
+
+        /** Shows the form for editing an income payout */
         function showPayoutModal(payoutKey) {
             const payout = state.currentBudget.income[payoutKey];
             const title = payoutKey === 'payout1' ? 'Payout 1' : 'Payout 2';
             const amount = payout.isPaid ? payout.actual : payout.expected;
             
             const content = `
-                <h3 class="text-lg font-medium">Edit Payout</h3>
-                <p class="text-sm text-gray-600 mb-4">Enter the actual amount received for ${title}.</p>
-                <form id="payout-form" data-payout-key="${payoutKey}">
+                <form id="payout-modal-form" data-key="${payoutKey}">
+                    <h3 class="text-lg font-medium mb-4">Edit Payout</h3>
+                    <p class="text-sm text-gray-600 mb-4">Enter the actual amount received for ${title}.</p>
                     <label class="block text-sm font-medium mb-1">Actual Amount</label>
-                    <input type="number" id="modal-payout-amount" value="${amount}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                    <input type="number" id="modal-amount" value="${amount}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                     <div class="flex justify-end space-x-2 mt-4">
                         <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
                         <button type="submit" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save</button>
@@ -598,19 +596,21 @@
                 </form>
             `;
             showModal(content);
+            document.getElementById('modal-cancel').onclick = hideModal;
+            document.getElementById('payout-modal-form').onsubmit = handlePayoutSave;
         }
-        
-        /** Shows modal for paying/editing a recurring expense */
+
+        /** Shows the form for editing a recurring expense */
         function showExpenseModal(expenseKey, index) {
             const item = state.currentBudget[expenseKey][index];
             const amount = item.isPaid ? item.actual : item.expected;
             
             const content = `
-                <h3 class="text-lg font-medium">Pay Expense</h3>
-                <p class="text-sm text-gray-600 mb-4">Enter the actual amount paid for ${item.name}.</p>
-                <form id="expense-form" data-key="${expenseKey}" data-index="${index}">
+                <form id="expense-modal-form" data-key="${expenseKey}" data-index="${index}">
+                    <h3 class="text-lg font-medium mb-4">Pay Expense</h3>
+                    <p class="text-sm text-gray-600 mb-4">Enter the actual amount paid for ${item.name}.</p>
                     <label class="block text-sm font-medium mb-1">Actual Amount</label>
-                    <input type="number" id="modal-expense-amount" value="${amount}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                    <input type="number" id="modal-amount" value="${amount}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                     <div class="flex justify-end space-x-2 mt-4">
                         <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
                         <button type="submit" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save Payment</button>
@@ -618,20 +618,18 @@
                 </form>
             `;
             showModal(content);
+            document.getElementById('modal-cancel').onclick = hideModal;
+            document.getElementById('expense-modal-form').onsubmit = handleExpenseSave;
         }
-
-        /** Shows modal for adding/editing a template item */
-        function showTemplateModal(key, itemId) {
-            const isNew = !itemId;
-            const item = isNew 
-                ? { id: `tpl-${new Date().getTime()}`, name: "", expected: 0, monthlyDueDate: '15th', endTerm: '2025-12' }
-                : state.settings[key].find(i => i.id === itemId);
-
+        
+        /** Shows the form for adding/editing a template item */
+        function showTemplateModal(key, item, isNew = false) {
             const isFixedExpense = key === 'recurringTemplate';
+            const title = isNew ? 'Add New' : 'Edit';
             
             const content = `
-                <form id="template-form" data-key="${key}" data-is-new="${isNew}" data-id="${item.id}">
-                    <h3 class="text-lg font-medium mb-4">${isNew ? 'Add New' : 'Edit'} Item</h3>
+                <form id="template-modal-form" data-key="${key}" data-id="${item.id}" data-is-new="${isNew}">
+                    <h3 class="text-lg font-medium mb-4">${title} Item</h3>
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium mb-1">Name</label>
@@ -642,14 +640,14 @@
                             <input type="number" id="template-expected" value="${item.expected}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
                         </div>
                         ${isFixedExpense ? `
-                            <div>
-                                <label class="block text-sm font-medium mb-1">Monthly Due Date</label>
-                                <input type="text" id="template-due-date" value="${item.monthlyDueDate || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-1">End Term (YYYY-MM)</label>
-                                <input type="month" id="template-end-term" value="${item.endTerm || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                            </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Monthly Due Date (e.g., "15th" or "End of month")</label>
+                            <input type="text" id="template-due-date" value="${item.monthlyDueDate || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">End Term (YYYY-MM)</label>
+                            <input type="month" id="template-end-term" value="${item.endTerm || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                        </div>
                         ` : ''}
                     </div>
                     <div class="flex justify-end space-x-2 mt-6">
@@ -659,162 +657,173 @@
                 </form>
             `;
             showModal(content);
-        }
-
-        // --- Event Listeners ---
-        
-        /** Attaches listeners for navigation */
-        function attachNavListeners() {
-            document.querySelectorAll('.nav-button').forEach(button => {
-                button.addEventListener('click', () => {
-                    state.view = button.dataset.view;
-                    renderApp();
-                });
-            });
-            
-            document.getElementById('sign-out-button').addEventListener('click', () => {
-                auth.signOut();
-            });
-            
-            document.getElementById('copy-user-id').addEventListener('click', () => {
-                const input = document.createElement('input');
-                input.value = state.userId;
-                document.body.appendChild(input);
-                input.select();
-                try {
-                    document.execCommand('copy');
-                } catch (err) {
-                    console.error('Failed to copy user ID.');
-                }
-                document.body.removeChild(input);
-            });
-        }
-        
-        /** Attaches listeners for the main content area */
-        function attachMainListeners() {
-            if (state.view === 'tracker') {
-                document.getElementById('month-select')?.addEventListener('change', handleMonthChange);
-                document.querySelectorAll('.payout-edit').forEach(b => b.addEventListener('click', handlePayoutEdit));
-                document.querySelectorAll('.payout-unpay').forEach(b => b.addEventListener('click', handlePayoutUnpay));
-                document.querySelectorAll('.expense-edit').forEach(b => b.addEventListener('click', handleExpenseEdit));
-                document.querySelectorAll('.expense-unpay').forEach(b => b.addEventListener('click', handleExpenseUnpay));
-                document.getElementById('variable-expense-form')?.addEventListener('submit', handleVariableSubmit);
-                document.querySelectorAll('.variable-delete').forEach(b => b.addEventListener('click', handleVariableDelete));
-                
-            } else if (state.view === 'settings') {
-                document.getElementById('save-income-settings')?.addEventListener('click', handleSaveIncomeSettings);
-                document.querySelectorAll('.template-add').forEach(b => b.addEventListener('click', handleTemplateAdd));
-                document.querySelectorAll('.template-edit').forEach(b => b.addEventListener('click', handleTemplateEdit));
-                document.querySelectorAll('.template-delete').forEach(b => b.addEventListener('click', handleTemplateDelete));
-            }
-        }
-        
-        /** Attaches listeners for modal interactions */
-        function attachModalListeners() {
-            // Use event delegation on the modal container
-            modalContainer.addEventListener('click', (e) => {
-                if (e.target.id === 'modal-cancel' || e.target.closest('#modal-cancel')) {
-                    closeModal();
-                }
-            });
-
-            modalContent.addEventListener('submit', (e) => {
-                e.preventDefault();
-                if (e.target.id === 'payout-form') {
-                    handlePayoutSave(e.target);
-                } else if (e.target.id === 'expense-form') {
-                    handleExpenseSave(e.target);
-                } else if (e.target.id === 'template-form') {
-                    handleTemplateSave(e.target);
-                }
-            });
+            document.getElementById('modal-cancel').onclick = hideModal;
+            document.getElementById('template-modal-form').onsubmit = handleTemplateSave;
         }
 
         // --- Event Handlers ---
         
-        function handleMonthChange(e) {
-            state.currentMonthId = e.target.value;
-            state.loading = true;
-            state.currentBudget = null; // Clear current budget
-            renderApp(); // Show loading
-            // Unsubscribe from old budget and subscribe to new one
-            state.unsubBudget();
-            state.unsubBudget = subscribeToBudget(state.currentMonthId);
+        /** Attaches listeners for navigation */
+        function attachNavListeners() {
+            document.querySelectorAll('.nav-button').forEach(btn => {
+                btn.onclick = (e) => {
+                    state.view = e.currentTarget.dataset.view;
+                    renderApp();
+                };
+            });
+            document.getElementById('sign-out-button').onclick = async () => {
+                await signOut(auth);
+                // On GitHub Pages, we can't just re-sign in anonymously easily without
+                // a full page reload or more complex state management.
+                // For simplicity, we'll just clear the state and show a signed-out message.
+                state.isAuthReady = false;
+                state.userId = null;
+                appRoot.innerHTML = `<div class="p-8 text-center">You have been signed out. Please refresh the page to sign back in.</div>`;
+                console.log("User signed out.");
+            };
         }
 
-        // Payout Handlers
-        function handlePayoutEdit(e) {
-            const key = e.currentTarget.dataset.payoutKey;
-            showPayoutModal(key);
-        }
+        /** Attaches listeners for the main content area */
+        function attachMainListeners() {
+            if (state.view === 'tracker') {
+                document.getElementById('month-select').onchange = (e) => {
+                    state.currentMonthId = e.target.value;
+                    state.currentBudget = null; // Force reload
+                    state.loading = true;
+                    // Detach old listener and setup new one
+                    state.unsubBudget();
+                    setupBudgetListener(state.currentMonthId);
+                    renderApp(); // Show loading
+                };
+                
+                document.querySelectorAll('.payout-edit').forEach(btn => {
+                    btn.onclick = (e) => showPayoutModal(e.currentTarget.dataset.payoutKey);
+                });
+                document.querySelectorAll('.payout-unpay').forEach(btn => {
+                    btn.onclick = (e) => handlePayoutUnpay(e.currentTarget.dataset.payoutKey);
+                });
 
-        function handlePayoutSave(form) {
-            const key = form.dataset.payoutKey;
-            const amount = Number(document.getElementById('modal-payout-amount').value);
+                document.querySelectorAll('.expense-edit').forEach(btn => {
+                    btn.onclick = (e) => showExpenseModal(e.currentTarget.dataset.key, e.currentTarget.dataset.index);
+                });
+                document.querySelectorAll('.expense-unpay').forEach(btn => {
+                    btn.onclick = (e) => handleExpenseUnpay(e.currentTarget.dataset.key, e.currentTarget.dataset.index);
+                });
+                
+                document.getElementById('variable-expense-form').onsubmit = handleVariableSave;
+                document.querySelectorAll('.variable-delete').forEach(btn => {
+                    btn.onclick = (e) => handleVariableDelete(e.currentTarget.dataset.id);
+                });
+
+            } else if (state.view === 'settings') {
+                document.getElementById('save-income-settings').onclick = handleIncomeSettingsSave;
+                
+                document.querySelectorAll('.template-add').forEach(btn => {
+                    btn.onclick = (e) => handleTemplateAdd(e.currentTarget.dataset.key);
+                });
+                document.querySelectorAll('.template-edit').forEach(btn => {
+                    btn.onclick = (e) => handleTemplateEdit(e.currentTarget.dataset.key, e.currentTarget.dataset.id);
+                });
+                document.querySelectorAll('.template-delete').forEach(btn => {
+                    btn.onclick = (e) => handleTemplateDelete(e.currentTarget.dataset.key, e.currentTarget.dataset.id);
+                });
+            }
             
-            const updatedBudget = { ...state.currentBudget };
-            updatedBudget.income[key] = {
-                ...updatedBudget.income[key],
-                actual: amount,
-                isPaid: true,
-            };
-            updateBudget(updatedBudget);
-            closeModal();
-        }
-
-        function handlePayoutUnpay(e) {
-            const key = e.currentTarget.dataset.payoutKey;
-            const updatedBudget = { ...state.currentBudget };
-            updatedBudget.income[key] = {
-                ...updatedBudget.income[key],
-                actual: 0,
-                isPaid: false,
-            };
-            updateBudget(updatedBudget);
-        }
-
-        // Recurring Expense Handlers
-        function handleExpenseEdit(e) {
-            const { key, index } = e.currentTarget.dataset;
-            showExpenseModal(key, index);
+            const copyBtn = document.getElementById('copy-user-id');
+            if (copyBtn) {
+                copyBtn.onclick = () => {
+                     try {
+                        const input = document.createElement('input');
+                        input.value = state.userId;
+                        document.body.appendChild(input);
+                        input.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(input);
+                        
+                        copyBtn.innerHTML = 'Copied!';
+                        setTimeout(() => { copyBtn.innerHTML = icons.copy; }, 1500);
+                    } catch (err) {
+                        console.error('Failed to copy user ID.');
+                    }
+                };
+            }
         }
         
-        function handleExpenseSave(form) {
-            const { key, index } = form.dataset;
-            const amount = Number(document.getElementById('modal-expense-amount').value);
+        // --- Data Logic (Saving/Updating) ---
+        
+        /** Save payout modal form */
+        async function handlePayoutSave(e) {
+            e.preventDefault();
+            const payoutKey = e.target.dataset.key;
+            const amount = Number(document.getElementById('modal-amount').value);
             
-            const updatedBudget = { ...state.currentBudget };
-            const updatedExpenses = [...updatedBudget[key]];
+            const updatedBudget = {
+                ...state.currentBudget,
+                income: {
+                    ...state.currentBudget.income,
+                    [payoutKey]: {
+                        ...state.currentBudget.income[payoutKey],
+                        actual: amount,
+                        isPaid: true,
+                    }
+                }
+            };
+            
+            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), updatedBudget);
+            hideModal();
+        }
+
+        /** Mark payout as unpaid */
+        async function handlePayoutUnpay(payoutKey) {
+             const updatedBudget = {
+                ...state.currentBudget,
+                income: {
+                    ...state.currentBudget.income,
+                    [payoutKey]: {
+                        ...state.currentBudget.income[payoutKey],
+                        actual: 0,
+                        isPaid: false,
+                    }
+                }
+            };
+            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), updatedBudget);
+        }
+
+        /** Save expense modal form */
+        async function handleExpenseSave(e) {
+            e.preventDefault();
+            const { key, index } = e.target.dataset;
+            const amount = Number(document.getElementById('modal-amount').value);
+            
+            const updatedExpenses = [...state.currentBudget[key]];
             updatedExpenses[index] = {
                 ...updatedExpenses[index],
                 actual: amount,
                 isPaid: true,
             };
-            updatedBudget[key] = updatedExpenses;
             
-            updateBudget(updatedBudget);
-            closeModal();
+            const updatedBudget = { ...state.currentBudget, [key]: updatedExpenses };
+            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), updatedBudget);
+            hideModal();
         }
-        
-        function handleExpenseUnpay(e) {
-            const { key, index } = e.currentTarget.dataset;
-            const updatedBudget = { ...state.currentBudget };
-            const updatedExpenses = [...updatedBudget[key]];
+
+        /** Mark expense as unpaid */
+        async function handleExpenseUnpay(key, index) {
+            const updatedExpenses = [...state.currentBudget[key]];
             updatedExpenses[index] = {
                 ...updatedExpenses[index],
                 actual: 0,
                 isPaid: false,
             };
-            updatedBudget[key] = updatedExpenses;
-            updateBudget(updatedBudget);
+            const updatedBudget = { ...state.currentBudget, [key]: updatedExpenses };
+            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), updatedBudget);
         }
 
-        // Variable Expense Handlers
-        function handleVariableSubmit(e) {
+        /** Save new variable expense */
+        async function handleVariableSave(e) {
             e.preventDefault();
             const name = document.getElementById('variable-name').value;
             const amount = Number(document.getElementById('variable-amount').value);
-            
             if (!name || !amount) return;
 
             const newExpense = {
@@ -824,78 +833,70 @@
                 date: new Date().toISOString(),
             };
 
-            const updatedBudget = {
-                ...state.currentBudget,
-                variableExpenses: [...state.currentBudget.variableExpenses, newExpense]
-            };
-            updateBudget(updatedBudget);
-            
-            // Clear form
+            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), {
+                variableExpenses: arrayUnion(newExpense)
+            });
             document.getElementById('variable-name').value = '';
             document.getElementById('variable-amount').value = '';
         }
-        
-        function handleVariableDelete(e) {
-            const id = e.currentTarget.dataset.id;
-            const updatedBudget = {
-                ...state.currentBudget,
-                variableExpenses: state.currentBudget.variableExpenses.filter(item => item.id !== id)
-            };
-            updateBudget(updatedBudget);
+
+        /** Delete variable expense */
+        async function handleVariableDelete(id) {
+            const itemToDelete = state.currentBudget.variableExpenses.find(item => item.id === id);
+            if (itemToDelete) {
+                await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), {
+                    variableExpenses: arrayRemove(itemToDelete)
+                });
+            }
         }
 
-        // Settings Handlers
-        function handleSaveIncomeSettings() {
+        /** Save income settings */
+        async function handleIncomeSettingsSave() {
             const payout1 = Number(document.getElementById('setting-payout1').value);
             const payout2 = Number(document.getElementById('setting-payout2').value);
-            updateSettings({
-                ...state.settings,
+            
+            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main'), {
                 avgPayout1: payout1,
-                avgPayout2: payout2,
+                avgPayout2: payout2
             });
         }
         
-        function handleTemplateAdd(e) {
-            const key = e.currentTarget.dataset.key;
-            if (key === 'flexibleLoansTemplate') {
-                const name = prompt(`Enter name for new Flexible Loan:`);
-                if (!name) return;
-                const amount = prompt("Enter expected amount:");
-                if (!amount) return;
-                
-                const newItem = {
-                    id: `tpl-${new Date().getTime()}`,
-                    name,
-                    expected: Number(amount),
-                };
-                updateSettings({
-                    ...state.settings,
-                    [key]: [...state.settings[key], newItem]
-                });
-            } else {
-                showTemplateModal(key, null); // Show modal for new item
+        /** Show template add modal */
+        function handleTemplateAdd(key) {
+            const newItem = {
+                id: `tpl-${new Date().getTime()}`,
+                name: "",
+                expected: 0,
+            };
+            if (key === 'recurringTemplate') {
+                newItem.monthlyDueDate = '15th';
+                newItem.endTerm = '2025-12';
             }
+            showTemplateModal(key, newItem, true);
         }
         
-        function handleTemplateEdit(e) {
-            const { key, id } = e.currentTarget.dataset;
-            showTemplateModal(key, id);
+        /** Show template edit modal */
+        function handleTemplateEdit(key, id) {
+            const item = state.settings[key].find(i => i.id === id);
+            showTemplateModal(key, item, false);
         }
-        
-        function handleTemplateSave(form) {
-            const { key, id, isNew } = form.dataset;
+
+        /** Save template modal form */
+        async function handleTemplateSave(e) {
+            e.preventDefault();
+            const { key, id, isNew } = e.target.dataset;
             
             const updatedItem = {
                 id: id,
                 name: document.getElementById('template-name').value,
                 expected: Number(document.getElementById('template-expected').value),
             };
-
+            
             if (key === 'recurringTemplate') {
                 updatedItem.monthlyDueDate = document.getElementById('template-due-date').value;
                 updatedItem.endTerm = document.getElementById('template-end-term').value;
             }
-
+            
             let updatedItems;
             if (isNew === 'true') {
                 updatedItems = [...state.settings[key], updatedItem];
@@ -903,30 +904,42 @@
                 updatedItems = state.settings[key].map(i => i.id === id ? updatedItem : i);
             }
             
-            updateSettings({
-                ...state.settings,
+            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main'), {
                 [key]: updatedItems
             });
-            closeModal();
+            hideModal();
         }
 
-        function handleTemplateDelete(e) {
-            const { key, id } = e.currentTarget.dataset;
-            if (confirm("Are you sure you want to delete this template?")) {
-                updateSettings({
-                    ...state.settings,
-                    [key]: state.settings[key].filter(item => item.id !== id)
-                });
-            }
+        /** Delete template item */
+        async function handleTemplateDelete(key, id) {
+            // A custom modal would be better than confirm().
+            const customModalContent = `
+                <h3 class="text-lg font-medium mb-4">Confirm Deletion</h3>
+                <p class="text-sm text-gray-600 mb-4">Are you sure you want to delete this template? This will not affect past budgets.</p>
+                <div class="flex justify-end space-x-2 mt-4">
+                    <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
+                    <button type="button" id="modal-confirm-delete" class="font-medium rounded-lg transition-colors bg-red-600 text-white hover:bg-red-700 px-4 py-2 text-sm">Delete</button>
+                </div>
+            `;
+            showModal(customModalContent);
+
+            document.getElementById('modal-cancel').onclick = hideModal;
+            document.getElementById('modal-confirm-delete').onclick = async () => {
+                const itemToDelete = state.settings[key].find(i => i.id === id);
+                if (itemToDelete) {
+                    await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main'), {
+                        [key]: arrayRemove(itemToDelete)
+                    });
+                }
+                hideModal();
+            };
         }
-        
-        // --- Firebase Data Logic ---
-        
-        /** Creates a new budget document for the given month */
+
+
+        // --- Initialization ---
+
+        /** Creates a new budget doc for the month based on settings */
         async function createNewMonthBudget(monthId, settingsDoc) {
-            state.loading = true;
-            renderApp();
-            
             const newBudget = {
                 month: monthId,
                 income: {
@@ -938,40 +951,43 @@
                 variableExpenses: [],
             };
             try {
-                const budgetRef = doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', monthId);
-                await setDoc(budgetRef, newBudget);
-                // The onSnapshot listener will pick this up
-            } catch (error) {
+                // Set the new budget
+                await setDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', monthId), newBudget);
+                // The onSnapshot listener will then pick it up
+            } catch (error)
+            {
+                // This is the OTHER likely error: Firestore rules not set to 'test mode'
                 console.error("Error creating new month budget:", error);
-                state.loading = false;
-                renderApp();
+                if (error.code === 'permission-denied') {
+                    console.error("===================================================================");
+                    console.error("APP FIX: Firestore permission denied. You MUST set your Firestore rules to 'test mode'.");
+                    console.error("HOW TO FIX: Go to Firebase Console > Build > Firestore Database > Rules (tab)");
+                    console.error("Change `allow read, write: if false;` to `allow read, write: if true;`");
+                    console.error("Click 'Publish'.");
+                    console.error("===================================================================");
+                    appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                        <h2 class="text-2xl font-bold">Database Error</h2>
+                        <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
+                        <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
+                            <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
+                                <li>Go to your Firebase project console.</li>
+                                <li>Click on <strong>Build > Firestore Database</strong>.</li>
+                                <li>Click the <strong>Rules</strong> tab.</li>
+                                <li>Change the line <code>allow read, write: if false;</code> to <code>allow read, write: if true;</code></li>
+                                <li>Click <strong>Publish</strong>.</li>
+                            </ol>
+                        </p>
+                    </div>`;
+                }
             }
         }
-        
-        /** Updates the current budget document */
-        async function updateBudget(updatedBudget) {
-            try {
-                const budgetRef = doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId);
-                await setDoc(budgetRef, updatedBudget);
-            } catch (error) {
-                console.error("Error updating budget:", error);
-            }
-        }
-        
-        /** Updates the settings document */
-        async function updateSettings(updatedSettings) {
-             try {
-                const settingsRef = doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main');
-                await setDoc(settingsRef, updatedSettings);
-            } catch (error) {
-                console.error("Error updating settings:", error);
-            }
-        }
-        
-        /** Subscribes to budget changes */
-        function subscribeToBudget(monthId) {
+
+        /** Sets up the listener for the current month's budget */
+        function setupBudgetListener(monthId) {
+            state.unsubBudget(); // Unsubscribe from old budget
             const budgetRef = doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', monthId);
-            return onSnapshot(budgetRef, async (docSnap) => {
+            
+            state.unsubBudget = onSnapshot(budgetRef, async (docSnap) => {
                 if (docSnap.exists()) {
                     state.currentBudget = docSnap.data();
                     state.loading = false;
@@ -981,41 +997,45 @@
                     if (state.settings) {
                         await createNewMonthBudget(monthId, state.settings);
                     }
-                    // if settings aren't loaded, the settings listener will trigger this.
+                    // else: we're still waiting for settings, do nothing
                 }
-            }, (error) => console.error("Error on budget snapshot:", error));
+            }, (error) => {
+                // Handle snapshot errors (likely permission denied)
+                console.error("Error listening to budget:", error);
+                if (error.code === 'permission-denied') {
+                    appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                        <h2 class="text-2xl font-bold">Database Error</h2>
+                        <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
+                        <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
+                            <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
+                                <li>Go to your Firebase project console.</li>
+                                <li>Click on <strong>Build > Firestore Database</strong>.</li>
+                                <li>Click the <strong>Rules</strong> tab.</li>
+                                <li>Change the line <code>allow read, write: if false;</code> to <code>allow read, write: if true;</code></li>
+                                <li>Click <strong>Publish</strong>.</li>
+                            </ol>
+                        </p>
+                    </div>`;
+                }
+            });
         }
 
-        // --- Initialization ---
-        
-        /** Main entry point */
-        function initialize() {
+        /** Initializes the application */
+        async function main() {
+            renderApp(); // Show initial loading screen
+            
             try {
-                // Add a check for a valid config
-                if (!firebaseConfig || firebaseConfig.apiKey === "PLACEHOLDER") {
-                    appRoot.innerHTML = `<div class="p-4 m-4 bg-red-100 text-red-800 rounded-lg">
-                        <strong>Error:</strong> Firebase configuration is missing. 
-                        <br><br>
-                        This app cannot run in this environment without a valid configuration.
-                        <br><br>
-                        If you are the developer, please follow the instructions in the code to create your own Firebase project and paste the 'firebaseConfig' object into the HTML file.
-                    </div>`;
-                    console.error("Firebase config is just a placeholder. Halting app initialization.");
-                    return;
-                }
-
-                const app = initializeApp(firebaseConfig);
+                app = initializeApp(firebaseConfig);
+                analytics = getAnalytics(app);
                 auth = getAuth(app);
                 db = getFirestore(app);
                 
-                attachModalListeners();
-
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         state.userId = user.uid;
                         state.isAuthReady = true;
 
-                        // 1. Subscribe to Settings
+                        // 1. Setup settings listener
                         const settingsRef = doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main');
                         state.unsubSettings = onSnapshot(settingsRef, async (docSnap) => {
                             if (docSnap.exists()) {
@@ -1025,47 +1045,86 @@
                                 const defaultSettings = {
                                     avgPayout1: 19000,
                                     avgPayout2: 19000,
-                                    payout1Day: 10,
-                                    payout2Day: 25,
                                     recurringTemplate: [],
                                     flexibleLoansTemplate: [],
                                 };
                                 await setDoc(settingsRef, defaultSettings);
                                 state.settings = defaultSettings;
                             }
-                            
-                            // 2. Subscribe to Budget (only after settings are loaded)
-                            if (!state.currentBudget) {
-                                state.unsubBudget = subscribeToBudget(state.currentMonthId);
-                            } else {
-                                // Settings updated, re-render
-                                renderApp();
+                            // Once settings are loaded, setup budget listener
+                            setupBudgetListener(state.currentMonthId);
+                        }, (error) => {
+                            // Handle settings snapshot errors (likely permission denied)
+                            console.error("Error listening to settings:", error);
+                            if (error.code === 'permission-denied') {
+                                appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                                    <h2 class="text-2xl font-bold">Database Error</h2>
+                                    <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
+                                    <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
+                                        <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
+                                            <li>Go to your Firebase project console.</li>
+                                            <li>Click on <strong>Build > Firestore Database</strong>.</li>
+                                            <li>Click the <strong>Rules</strong> tab.</li>
+                                            <li>Change the line <code>allow read, write: if false;</code> to <code>allow read, write: if true;</code></li>
+                                            <li>Click <strong>Publish</strong>.</li>
+                                        </ol>
+                                    </p>
+                                </div>`;
                             }
-                        }, (error) => console.error("Error on settings snapshot:", error));
+                        });
 
                     } else {
-                        // No user, sign in
+                        // No user, sign in anonymously
                         try {
-                            if (typeof __initial_auth_token !== 'undefined') {
-                                await signInWithCustomToken(auth, __initial_auth_token);
+                            await signInAnonymously(auth);
+                        } catch (authError) {
+                            // Log a very clear, actionable message to the console
+                            console.error("===================================================================");
+                            console.error("APP FIX: This is not a code bug. You MUST enable 'Anonymous' sign-in in your Firebase project.");
+                            console.error("HOW TO FIX: Go to Firebase Console > Build > Authentication > Sign-in method");
+                            console.error("Click 'Anonymous' and 'Enable' it.");
+                            console.error("Refresh this page after enabling.");
+                            console.error("===================================================================");
+                            console.error("Original error details:", authError); // Keep the original log
+                            
+                            // This is the specific error the user is seeing.
+                            if (authError.code === 'auth/configuration-not-found') {
+                                 appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                                    <h2 class="text-2xl font-bold">Authentication Error</h2>
+                                    <p class="mt-2">Failed to sign in. You must enable <strong>Anonymous Sign-In</strong> in your Firebase project.</p>
+                                    <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
+                                        <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
+                                            <li>Go to your Firebase project console.</li>
+                                            <li>Click on <strong>Build > Authentication</strong>.</li>
+                                            <li>Go to the <strong>Sign-in method</strong> tab.</li>
+                                            <li>Find <strong>Anonymous</strong> in the list, click it, and enable it.</li>
+                                            <li>Refresh this page.</li>
+                                        </ol>
+                                    </p>
+                                </div>`;
                             } else {
-                                await signInAnonymously(auth);
+                                // Generic auth error
+                                appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                                    <h2 class="text-2xl font-bold">Authentication Error</h2>
+                                    <p class="mt-2">${authError.message}</p>
+                                </div>`;
                             }
-                        } catch (error) {
-                            console.error("Error signing in:", error);
-                            appRoot.innerHTML = `<div class="p-4 text-red-600">Error signing in: ${error.message}</div>`;
                         }
                     }
                 });
-                
+
             } catch (error) {
                 console.error("Error initializing Firebase:", error);
-                appRoot.innerHTML = `<div class="p-4 text-red-600">Error initializing app: ${error.message}</div>`;
+                appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                    <h2 class="text-2xl font-bold">Error connecting to database</h2>
+                    <p class=mt-2>Could not initialize Firebase. Please check your console and Firebase configuration.</p>
+                    <p class="mt-1 text-sm text-gray-700">Did you remember to enable Anonymous Auth and Firestore in your Firebase project?</p>
+                </div>`;
             }
         }
         
-        // Start the app
-        initialize();
+        // Start the application
+        main();
 
     </script>
 </body>
