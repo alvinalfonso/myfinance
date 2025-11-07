@@ -1058,7 +1058,104 @@
                 hideModal();
             };
         }
+        
+        // --- Modal & Form Logic (The missing functions) ---
 
+        /** Shows the modal with specific content */
+        function showModal(content) {
+            modalContent.innerHTML = content;
+            modalContainer.classList.remove('hidden');
+        }
+
+        /** Hides the modal */
+        function hideModal() {
+            modalContent.innerHTML = '';
+            modalContainer.classList.add('hidden');
+        }
+        
+        /** Shows the form for editing an income payout */
+        function showPayoutModal(payoutKey) {
+            const payout = state.currentBudget.income[payoutKey];
+            const title = payoutKey === 'payout1' ? 'Payout 1' : 'Payout 2';
+            const amount = payout.isPaid ? payout.actual : payout.expected;
+            
+            const content = `
+                <form id="payout-modal-form" data-key="${payoutKey}">
+                    <h3 class="text-lg font-medium mb-4">Edit Payout</h3>
+                    <p class="text-sm text-gray-600 mb-4">Enter the actual amount received for ${title}.</p>
+                    <label class="block text-sm font-medium mb-1">Actual Amount</label>
+                    <input type="number" id="modal-amount" value="${amount}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
+                        <button type="submit" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save</button>
+                    </div>
+                </form>
+            `;
+            showModal(content);
+            document.getElementById('modal-cancel').onclick = hideModal;
+            document.getElementById('payout-modal-form').onsubmit = handlePayoutSave;
+        }
+
+        /** Shows the form for editing a recurring expense */
+        function showExpenseModal(expenseKey, index) {
+            const item = state.currentBudget[expenseKey][index];
+            const amount = item.isPaid ? item.actual : item.expected;
+            
+            const content = `
+                <form id="expense-modal-form" data-key="${expenseKey}" data-index="${index}">
+                    <h3 class="text-lg font-medium mb-4">Pay Expense</h3>
+                    <p class="text-sm text-gray-600 mb-4">Enter the actual amount paid for ${item.name}.</p>
+                    <label class="block text-sm font-medium mb-1">Actual Amount</label>
+                    <input type="number" id="modal-amount" value="${amount}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
+                        <button type="submit" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save Payment</button>
+                    </div>
+                </form>
+            `;
+            showModal(content);
+            document.getElementById('modal-cancel').onclick = hideModal;
+            document.getElementById('expense-modal-form').onsubmit = handleExpenseSave;
+        }
+
+        /** Shows the form for adding/editing a template item */
+        function showTemplateModal(key, item, isNew = false) {
+            const isFixedExpense = key === 'recurringTemplate';
+            const title = isNew ? 'Add New' : 'Edit';
+            
+            const content = `
+                <form id="template-modal-form" data-key="${key}" data-id="${item.id}" data-is-new="${isNew}">
+                    <h3 class="text-lg font-medium mb-4">${title} Item</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Name</label>
+                            <input type="text" id="template-name" value="${item.name}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Expected Amount (Monthly Due)</label>
+                            <input type="number" id="template-expected" value="${item.expected}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
+                        </div>
+                        ${isFixedExpense ? `
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Monthly Due Date (e.g., "15th")</label>
+                            <input type="text" id="template-due-date" value="${item.monthlyDueDate}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">End Term (Month/Year)</label>
+                            <input type="month" id="template-end-term" value="${item.endTerm}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="flex justify-end space-x-2 mt-6">
+                        <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
+                        <button type="submit" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save</button>
+                    </div>
+                </form>
+            `;
+            showModal(content);
+            document.getElementById('modal-cancel').onclick = hideModal;
+            document.getElementById('template-modal-form').onsubmit = handleTemplateSave;
+        }
 
         // --- Initialization ---
 
