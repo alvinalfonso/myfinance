@@ -537,7 +537,7 @@
                                 <div class="flex items-center text-xs text-blue-600 mt-1">
                                     ${icons.calendarDays}
                                     Monthly, Due: ${item.monthlyDueDate}
-                                    ${item.endTerm ? `<span class="ml-2">| Ends: ${item.endTerm}</span>` : ''}
+                                    ${isFixedExpense && item.endTerm ? `<span class="ml-2">| Ends: ${item.endTerm}</span>` : ''}
                                 </div>` 
                             : `<div class="flex items-center text-xs text-green-600 mt-1">Monthly</div>`
                             }
@@ -572,12 +572,15 @@
             `;
         }
         
-        /** Renders the 3-month forecast view */
+        /**
+         * Renders the 3-month forecast view
+         * --- COMPREHENSIVELY REVISED ---
+         */
         function renderForecastView() {
             const forecastMonths = [];
             let startingBalance = 0;
 
-            // 1. Calculate Current Month's Outcome
+            // --- 1. Calculate Current Month's Outcome ---
             const { income, recurringExpenses, semiMonthlyExpenses, variableExpenses } = state.currentBudget;
             
             // Handle old data structures
@@ -589,30 +592,42 @@
             const actualExpenses = 
                 [...validRecurring, ...validSemiMonthly].reduce((sum, item) => sum + (item.isPaid ? item.actual : 0), 0) +
                 validVariable.reduce((sum, item) => sum + (item.amount || 0), 0);
-            startingBalance = actualIncome - actualExpenses; // This is the cash on hand
+            
+            // This is the cash on hand *right now*
+            startingBalance = actualIncome - actualExpenses; 
 
             const remainingIncome = 
                 (income.payout1.isPaid ? 0 : income.payout1.expected) +
                 (income.payout2.isPaid ? 0 : income.payout2.expected);
                 
-            const remainingExpenses = 
-                [...validRecurring, ...validSemiMonthly].filter(item => !item.isPaid)
-                .reduce((sum, item) => sum + (item.expected || 0), 0);
+            const remainingExpensesList = 
+                [...validRecurring, ...validSemiMonthly].filter(item => !item.isPaid);
+                
+            const remainingExpenses = remainingExpensesList.reduce((sum, item) => sum + (item.expected || 0), 0);
 
             const thisMonthEndBalance = startingBalance + remainingIncome - remainingExpenses;
             
+            // Get breakdown for current month
+            const currentMonthExpenseBreakdown = [
+                ...validRecurring.filter(item => item.isPaid).map(item => ({ name: item.name, amount: item.actual, isPaid: true })),
+                ...validSemiMonthly.filter(item => item.isPaid).map(item => ({ name: item.name, amount: item.actual, isPaid: true })),
+                ...validVariable.map(item => ({ name: item.name, amount: item.amount, isPaid: true })),
+                ...remainingExpensesList.map(item => ({ name: item.name, amount: item.expected, isPaid: false }))
+            ];
+            
             forecastMonths.push({
-                month: state.currentMonthId, // --- FIX: Use state.currentMonthId ---
+                month: state.currentMonthId,
                 start: 0, 
                 income: actualIncome + remainingIncome,
                 expenses: actualExpenses + remainingExpenses,
                 end: thisMonthEndBalance,
-                isCurrent: true
+                isCurrent: true,
+                expenseBreakdown: currentMonthExpenseBreakdown
             });
             
             startingBalance = thisMonthEndBalance; // Set for next month's calculation
 
-            // 2. Calculate Next 3 Months
+            // --- 2. Calculate Next 3 Months ---
             const safeSettings = {
                 avgPayout1: 19000,
                 avgPayout2: 19000,
@@ -623,45 +638,69 @@
 
             const expectedMonthlyIncome = safeSettings.avgPayout1 + safeSettings.avgPayout2;
             
-            // --- FIX: Smarter expense calculation ---
             const allTemplateExpenses = [
                 ...(safeSettings.recurringTemplate || []), 
                 ...(safeSettings.semiMonthlyExpensesTemplate || [])
             ];
 
-            let currentMonthId = state.currentMonthId; // --- FIX: Use state.currentMonthId ---
+            // --- FIX: Initialize monthId *before* the loop ---
+            let currentMonthId = state.currentMonthId; 
+            
             for (let i = 0; i < 3; i++) {
+                // --- FIX: Increment monthId *inside* the loop ---
                 currentMonthId = getNextMonthId(currentMonthId); // Get NEXT month
+                
+                const futureExpenseBreakdown = [];
                 
                 // Calculate expenses specifically for *this* future month
                 const expectedMonthlyExpenses = allTemplateExpenses.reduce((sum, item) => {
                     const itemPaymentType = item.paymentType || 'monthly'; // Default to monthly for old data
                     if (itemPaymentType === 'monthly') {
-                        return sum + item.expected; // Add all monthly items
+                        // For monthly items, check endTerm
+                        if (!item.endTerm || item.endTerm >= currentMonthId) {
+                             futureExpenseBreakdown.push({ name: item.name, amount: item.expected, isPaid: false });
+                             return sum + item.expected;
+                        }
                     }
                     if (itemPaymentType === 'oneTime' && item.dueMonth === currentMonthId) {
+                        futureExpenseBreakdown.push({ name: item.name, amount: item.expected, isPaid: false });
                         return sum + item.expected; // Add one-time items *only* if they are due this month
                     }
                     return sum; // Otherwise, add nothing
                 }, 0);
 
                 const endBalance = startingBalance + expectedMonthlyIncome - expectedMonthlyExpenses;
+                
                 forecastMonths.push({
                     month: currentMonthId,
                     start: startingBalance,
                     income: expectedMonthlyIncome,
                     expenses: expectedMonthlyExpenses,
                     end: endBalance,
-                    isCurrent: false
+                    isCurrent: false,
+                    expenseBreakdown: futureExpenseBreakdown
                 });
                 startingBalance = endBalance;
             }
 
+            // --- 3. Render the Cards ---
             const statBox = (title, value, color) => `
                 <div class="p-4 bg-gray-50 rounded-lg">
                     <h4 class="text-sm font-medium text-gray-500">${title}</h4>
                     <p class="text-2xl font-bold ${color}">${value}</p>
                 </div>`;
+            
+            const renderExpenseBreakdown = (items) => {
+                if (items.length === 0) {
+                    return '<p class="text-xs text-gray-500">No expenses projected.</p>';
+                }
+                return items.map(item => `
+                    <div class="flex justify-between items-center text-xs ${item.isPaid ? 'text-gray-400' : 'text-gray-700'}">
+                        <span>${item.name} ${item.isPaid ? '(Paid)' : ''}</span>
+                        <span class="font-medium">${formatCurrency(item.amount)}</span>
+                    </div>
+                `).join('');
+            };
             
             const monthCards = forecastMonths.map(month => `
                 <div class="bg-white shadow-md rounded-lg overflow-hidden ${month.isCurrent ? 'border-blue-500 border-2' : ''}">
@@ -669,10 +708,20 @@
                         <h3 class="text-xl font-semibold">${new Date(month.month + '-02').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
                         ${month.isCurrent ? `<span class="text-xs font-medium text-blue-600">CURRENT MONTH (Projected)</span>` : ''}
                     </div>
-                    <div class="p-4 md:p-6 space-y-2">
+                    <div class="p-4 md:p-6 space-y-4">
                         ${!month.isCurrent ? statBox('Starting Balance', formatCurrency(month.start), 'text-gray-700') : ''}
                         ${statBox('Projected Income', formatCurrency(month.income), 'text-green-600')}
-                        ${statBox('Projected Expenses', formatCurrency(month.expenses), 'text-red-600')}
+                        
+                        <!-- Revised Expense Box -->
+                        <div class="p-4 bg-gray-50 rounded-lg">
+                            <h4 class="text-sm font-medium text-gray-500">Projected Expenses</h4>
+                            <p class="text-2xl font-bold text-red-600">${formatCurrency(month.expenses)}</p>
+                            <div class="border-t my-2"></div>
+                            <div class="space-y-1 max-h-24 overflow-y-auto pr-1">
+                                ${renderExpenseBreakdown(month.expenseBreakdown)}
+                            </div>
+                        </div>
+                        
                         ${statBox('Projected End Balance', formatCurrency(month.end), month.end >= 0 ? 'text-blue-700' : 'text-red-700')}
                     </div>
                 </div>
@@ -682,7 +731,7 @@
                 <div class="space-y-6 no-print">
                     <h2 class="text-3xl font-bold">3-Month Forecast</h2>
                     <p class="text-gray-600">This forecast uses your average income and recurring expenses from your settings. It does not include 'Daily & Unplanned Expenses'.</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6">
                         ${monthCards}
                     </div>
                 </div>
@@ -1096,7 +1145,7 @@
         async function handleTemplateSave(e) {
             e.preventDefault();
             const { key, id, isNew, isFixed } = e.target.dataset;
-            const isFixedExpense = isFixed === 'true'; // This was always true, logic fixed
+            const isFixedExpense = isFixed === 'true';
 
             const updatedItem = {
                 id: id,
@@ -1321,13 +1370,29 @@
                 ...settingsDoc,
             };
 
-            const newRecurring = (safeSettings.recurringTemplate || [])
-                .filter(item => (item.paymentType || 'monthly') === 'monthly' || (item.paymentType === 'oneTime' && item.dueMonth === monthId))
+            const allTemplateExpenses = [
+                ...(safeSettings.recurringTemplate || []), 
+                ...(safeSettings.semiMonthlyExpensesTemplate || [])
+            ];
+            
+            const newExpenses = allTemplateExpenses
+                .filter(item => {
+                    const itemPaymentType = item.paymentType || 'monthly';
+                    if (itemPaymentType === 'monthly') {
+                        // Include monthly items, unless their endTerm has passed
+                        return !item.endTerm || item.endTerm >= monthId;
+                    }
+                    if (itemPaymentType === 'oneTime') {
+                        // Include one-time items *only* if they are due this month
+                        return item.dueMonth === monthId;
+                    }
+                    return false;
+                })
                 .map(item => ({ ...item, actual: 0, isPaid: false }));
-                
-            const newSemiMonthly = (safeSettings.semiMonthlyExpensesTemplate || [])
-                .filter(item => (item.paymentType || 'monthly') === 'monthly' || (item.paymentType === 'oneTime' && item.dueMonth === monthId))
-                .map(item => ({ ...item, actual: 0, isPaid: false }));
+
+            // Separate them back out
+            const newRecurring = newExpenses.filter(item => (safeSettings.recurringTemplate || []).some(t => t.id === item.id));
+            const newSemiMonthly = newExpenses.filter(item => (safeSettings.semiMonthlyExpensesTemplate || []).some(t => t.id === item.id));
 
             const newBudget = {
                 month: monthId,
@@ -1351,7 +1416,7 @@
                 if (error.code === 'permission-denied') {
                     // ** FIX: Explicitly stop loading and show error **
                     state.loading = false; 
-                    renderApp(); // This will re-render, but state.loading is false
+                    // We can't renderApp() here as it might not be fully initialized
                     appRoot.innerHTML = `<div class="p-8 text-center text-red-600 no-print">
                         <h2 class="text-2xl font-bold">Database Error</h2>
                         <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
@@ -1392,7 +1457,8 @@
                 if (error.code === 'permission-denied') {
                      // ** FIX: Explicitly stop loading and show error **
                     state.loading = false;
-                    renderApp(); // This will re-render, but state.loading is false
+                    renderApp(); // This will call renderApp, which will see loading=false and auth=true, but will fail
+                    // This error is critical and should take over the screen.
                     appRoot.innerHTML = `<div class="p-8 text-center text-red-600 no-print">
                         <h2 class="text-2xl font-bold">Database Error</h2>
                         <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
@@ -1450,7 +1516,8 @@
                 if (error.code === 'permission-denied') {
                      // ** FIX: Explicitly stop loading and show error **
                     state.loading = false;
-                    renderApp(); // This will re-render, but state.loading is false
+                    renderApp(); // This will call renderApp, which will see loading=false and auth=true, but will fail
+                    // This error is critical and should take over the screen.
                     appRoot.innerHTML = `<div class="p-8 text-center text-red-600 no-print">
                         <h2 class="text-2xl font-bold">Database Error</h2>
                         <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
@@ -1501,8 +1568,8 @@
                         // Detach listeners
                         state.unsubSettings();
                         state.unsubBudget();
-                        
-                        renderLoginScreen(); // Show the login screen
+
+                        renderApp(); // This will call renderLoginScreen()
                     }
                 });
 
@@ -1521,4 +1588,3 @@
     </script>
 </body>
 </html>
-
