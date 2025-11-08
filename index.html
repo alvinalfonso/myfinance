@@ -281,10 +281,10 @@
                     ${renderSummaryView(state.currentBudget)}
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        ${renderIncomeTracker(state.currentBudget)}
+                        ${renderIncomeTracker(state.currentBudget, state.settings)}
                         ${renderOtherExpensesTracker(state.currentBudget)}
                         ${renderRecurringExpensesTracker(state.currentBudget, 'recurringExpenses', 'Fixed Monthly Expenses (Bills, Loans, etc.)')}
-                        ${renderRecurringExpensesTracker(state.currentBudget, 'flexibleLoans', 'Other Flexible Loans')}
+                        ${renderRecurringExpensesTracker(state.currentBudget, 'semiMonthlyExpenses', 'Semi-Monthly Expenses')}
                     </div>
                 </div>
             `;
@@ -292,20 +292,20 @@
 
         /** Renders the summary card */
         function renderSummaryView(budget) {
-            const { income, recurringExpenses, flexibleLoans, variableExpenses } = budget;
+            const { income, recurringExpenses, semiMonthlyExpenses, variableExpenses } = budget;
 
             const totalExpectedIncome = income.payout1.expected + income.payout2.expected;
             const totalActualIncome = (income.payout1.isPaid ? income.payout1.actual : 0) + (income.payout2.isPaid ? income.payout2.actual : 0);
 
-            const totalExpectedExpenses = [...recurringExpenses, ...flexibleLoans].reduce((sum, item) => sum + item.expected, 0);
+            const totalExpectedExpenses = [...recurringExpenses, ...semiMonthlyExpenses].reduce((sum, item) => sum + item.expected, 0);
             const totalActualExpenses = 
-                [...recurringExpenses, ...flexibleLoans].reduce((sum, item) => sum + (item.isPaid ? item.actual : 0), 0) +
+                [...recurringExpenses, ...semiMonthlyExpenses].reduce((sum, item) => sum + (item.isPaid ? item.actual : 0), 0) +
                 variableExpenses.reduce((sum, item) => sum + item.amount, 0);
                 
             const actualNet = totalActualIncome - totalActualExpenses;
             const expectedNet = totalExpectedIncome - totalExpectedExpenses;
 
-            const remainingToPay = [...recurringExpenses, ...flexibleLoans]
+            const remainingToPay = [...recurringExpenses, ...semiMonthlyExpenses]
                 .filter(item => !item.isPaid)
                 .reduce((sum, item) => sum + item.expected, 0);
                 
@@ -333,7 +333,7 @@
         }
 
         /** Renders the income tracker card */
-        function renderIncomeTracker(budget) {
+        function renderIncomeTracker(budget, settings) {
             const payoutItem = (payout, payoutKey, title) => {
                 if (payout.isPaid) {
                     return `
@@ -355,17 +355,17 @@
                     <div class="p-4 md:p-6 space-y-4">
                         <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                             <div>
-                                <h4 class="font-medium">Payout 1</h4>
+                                <h4 class="font-medium">${settings.payout1Label}</h4>
                                 <span class="text-sm text-gray-500">Expected: ${formatCurrency(budget.income.payout1.expected)}</span>
                             </div>
-                            ${payoutItem(budget.income.payout1, 'payout1', 'Payout 1')}
+                            ${payoutItem(budget.income.payout1, 'payout1', settings.payout1Label)}
                         </div>
                         <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                             <div>
-                                <h4 class="font-medium">Payout 2</h4>
+                                <h4 class="font-medium">${settings.payout2Label}</h4>
                                 <span class="text-sm text-gray-500">Expected: ${formatCurrency(budget.income.payout2.expected)}</span>
                             </div>
-                            ${payoutItem(budget.income.payout2, 'payout2', 'Payout 2')}
+                            ${payoutItem(budget.income.payout2, 'payout2', settings.payout2Label)}
                         </div>
                     </div>
                 </div>
@@ -391,12 +391,21 @@
                     paidStatus = `<button data-key="${expenseKey}" data-index="${index}" class="expense-edit font-medium rounded-lg transition-colors bg-white text-blue-700 border border-blue-600 hover:bg-blue-50 px-2 py-1 text-xs flex items-center">${icons.creditCard} Pay</button>`;
                 }
 
+                // --- NEW UI LOGIC for payment types ---
+                let paymentTypeInfo = '';
+                if (item.paymentType === 'oneTime') {
+                    paymentTypeInfo = `<span class="ml-2 text-xs text-indigo-600">(One-Time, Due: ${item.dueMonth})</span>`;
+                } else {
+                    // Default to "Monthly"
+                    paymentTypeInfo = `<span class="ml-2 text-xs text-green-600">(Monthly)</span>`;
+                }
+
                 return `
                     <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                         <div>
-                            <h4 class="font-medium">${item.name}</h4>
+                            <h4 class="font-medium">${item.name} ${paymentTypeInfo}</h4>
                             <span class="text-sm text-gray-500">Expected: ${formatCurrency(item.expected)}</span>
-                            ${item.monthlyDueDate ? `
+                            ${item.paymentType === 'monthly' && item.monthlyDueDate ? `
                                 <div class="flex items-center text-xs text-blue-600 mt-1">
                                     ${icons.calendarDays}
                                     Due: ${item.monthlyDueDate}
@@ -462,43 +471,63 @@
                     <h2 class="text-3xl font-bold">Settings</h2>
                     
                     <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                        <div class="p-4 md:p-6 border-b"><h3 class="text-xl font-semibold">Average Income</h3></div>
+                        <div class="p-4 md:p-6 border-b"><h3 class="text-xl font-semibold">Income</h3></div>
                         <div class="p-4 md:p-6 space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium mb-1">Average Payout 1 (10th)</label>
-                                <input type="number" id="setting-payout1" value="${state.settings.avgPayout1}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium mb-1">Average Payout 2 (25th)</label>
-                                <input type="number" id="setting-payout2" value="${state.settings.avgPayout2}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Payout 1 Label</label>
+                                    <input type="text" id="setting-payout1-label" value="${state.settings.payout1Label}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Average Payout 1 Amount</label>
+                                    <input type="number" id="setting-payout1" value="${state.settings.avgPayout1}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Payout 2 Label</label>
+                                    <input type="text" id="setting-payout2-label" value="${state.settings.payout2Label}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">Average Payout 2 Amount</label>
+                                    <input type="number" id="setting-payout2" value="${state.settings.avgPayout2}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                                </div>
                             </div>
                             <button id="save-income-settings" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save Income Settings</button>
                         </div>
                     </div>
 
                     ${renderTemplateEditor('Fixed Monthly Expenses (Bills, Loans, etc.)', 'recurringTemplate', state.settings.recurringTemplate, true)}
-                    ${renderTemplateEditor('Other Flexible Loans Template', 'flexibleLoansTemplate', state.settings.flexibleLoansTemplate, false)}
+                    ${renderTemplateEditor('Semi-Monthly Expenses', 'semiMonthlyExpensesTemplate', state.settings.semiMonthlyExpensesTemplate, false)}
                 </div>
             `;
         }
 
         /** Renders a template editor card for the settings page */
-        function renderTemplateEditor(title, key, items, showDetails) {
+        function renderTemplateEditor(title, key, items, isFixedExpense) {
             const itemsHtml = items.map(item => `
                 <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <div>
                         <h4 class="font-medium">${item.name}</h4>
                         <span class="text-sm text-gray-500">Expected: ${formatCurrency(item.expected)}</span>
-                        ${showDetails && item.monthlyDueDate ? `
-                            <div class="flex items-center text-xs text-blue-600 mt-1">
+                        
+                        <!-- NEW: Show payment type info -->
+                        ${item.paymentType === 'oneTime' ? `
+                            <div class="flex items-center text-xs text-indigo-600 mt-1">
                                 ${icons.calendarDays}
-                                Due: ${item.monthlyDueDate}
-                                ${item.endTerm ? `<span class="ml-2">| Ends: ${item.endTerm}</span>` : ''}
-                            </div>` : ''
-                        }
+                                One-Time, Due: ${item.dueMonth || 'N/A'}
+                            </div>
+                        ` : `
+                            ${isFixedExpense && item.monthlyDueDate ? `
+                                <div class="flex items-center text-xs text-blue-600 mt-1">
+                                    ${icons.calendarDays}
+                                    Monthly, Due: ${item.monthlyDueDate}
+                                    ${item.endTerm ? `<span class="ml-2">| Ends: ${item.endTerm}</span>` : ''}
+                                </div>` 
+                            : `<div class="flex items-center text-xs text-green-600 mt-1">Monthly</div>`
+                            }
+                        `}
                     </div>
                     <div class="flex space-x-1">
-                        <button data-key="${key}" data-id="${item.id}" class="template-edit font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 p-2">
+                        <button data-key="${key}" data-id="${item.id}" data-is-fixed="${isFixedExpense}" class="template-edit font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 p-2">
                             ${icons.clipboardEdit}
                         </button>
                         <button data-key="${key}" data-id="${item.id}" class="template-delete font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 p-2">
@@ -512,7 +541,7 @@
                 <div class="bg-white shadow-md rounded-lg overflow-hidden">
                     <div class="p-4 md:p-6 border-b flex flex-row justify-between items-center">
                         <h3 class="text-xl font-semibold">${title}</h3>
-                        <button data-key="${key}" class="template-add font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-2 py-1 text-xs flex items-center">
+                        <button data-key="${key}" data-is-fixed="${isFixedExpense}" class="template-add font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-2 py-1 text-xs flex items-center">
                             ${icons.plus} Add New
                         </button>
                     </div>
@@ -532,11 +561,11 @@
             let startingBalance = 0;
 
             // 1. Calculate Current Month's Outcome
-            const { income, recurringExpenses, flexibleLoans, variableExpenses } = state.currentBudget;
+            const { income, recurringExpenses, semiMonthlyExpenses, variableExpenses } = state.currentBudget;
             
             const actualIncome = (income.payout1.isPaid ? income.payout1.actual : 0) + (income.payout2.isPaid ? income.payout2.actual : 0);
             const actualExpenses = 
-                [...recurringExpenses, ...flexibleLoans].reduce((sum, item) => sum + (item.isPaid ? item.actual : 0), 0) +
+                [...recurringExpenses, ...semiMonthlyExpenses].reduce((sum, item) => sum + (item.isPaid ? item.actual : 0), 0) +
                 variableExpenses.reduce((sum, item) => sum + item.amount, 0);
             startingBalance = actualIncome - actualExpenses; // This is the cash on hand
 
@@ -545,13 +574,13 @@
                 (income.payout2.isPaid ? 0 : income.payout2.expected);
                 
             const remainingExpenses = 
-                [...recurringExpenses, ...flexibleLoans].filter(item => !item.isPaid)
+                [...recurringExpenses, ...semiMonthlyExpenses].filter(item => !item.isPaid)
                 .reduce((sum, item) => sum + item.expected, 0);
 
             const thisMonthEndBalance = startingBalance + remainingIncome - remainingExpenses;
             
             forecastMonths.push({
-                month: state.currentMonthId, // Use state.currentMonthId
+                month: state.currentMonthId, // --- FIX: Use state.currentMonthId ---
                 start: 0, 
                 income: actualIncome + remainingIncome,
                 expenses: actualExpenses + remainingExpenses,
@@ -563,13 +592,28 @@
 
             // 2. Calculate Next 3 Months
             const expectedMonthlyIncome = state.settings.avgPayout1 + state.settings.avgPayout2;
-            const expectedMonthlyExpenses = 
-                [...state.settings.recurringTemplate, ...state.settings.flexibleLoansTemplate]
-                .reduce((sum, item) => sum + item.expected, 0);
+            
+            // --- FIX: Smarter expense calculation ---
+            const allTemplateExpenses = [
+                ...state.settings.recurringTemplate, 
+                ...state.settings.semiMonthlyExpensesTemplate
+            ];
 
-            let currentMonthId = state.currentMonthId; // Start from current month
+            let currentMonthId = state.currentMonthId; // --- FIX: Use state.currentMonthId ---
             for (let i = 0; i < 3; i++) {
                 currentMonthId = getNextMonthId(currentMonthId); // Get NEXT month
+                
+                // Calculate expenses specifically for *this* future month
+                const expectedMonthlyExpenses = allTemplateExpenses.reduce((sum, item) => {
+                    if (item.paymentType === 'monthly') {
+                        return sum + item.expected; // Add all monthly items
+                    }
+                    if (item.paymentType === 'oneTime' && item.dueMonth === currentMonthId) {
+                        return sum + item.expected; // Add one-time items *only* if they are due this month
+                    }
+                    return sum; // Otherwise, add nothing
+                }, 0);
+
                 const endBalance = startingBalance + expectedMonthlyIncome - expectedMonthlyExpenses;
                 forecastMonths.push({
                     month: currentMonthId,
@@ -606,7 +650,7 @@
             return `
                 <div class="space-y-6 no-print">
                     <h2 class="text-3xl font-bold">3-Month Forecast</h2>
-                    <p class="text-gray-600">This forecast uses your average income and expected recurring expenses from your settings. It does not include 'Daily & Unplanned Expenses'.</p>
+                    <p class="text-gray-600">This forecast uses your average income and recurring expenses from your settings. It does not include 'Daily & Unplanned Expenses'.</p>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         ${monthCards}
                     </div>
@@ -666,7 +710,7 @@
             }
 
             const budget = docSnap.data();
-            const { income, recurringExpenses, flexibleLoans, variableExpenses } = budget;
+            const { income, recurringExpenses, semiMonthlyExpenses, variableExpenses } = budget;
 
             // --- Calculations ---
             const totalIncome = (income.payout1.isPaid ? income.payout1.actual : 0) + (income.payout2.isPaid ? income.payout2.actual : 0);
@@ -675,13 +719,13 @@
                 .filter(item => item.isPaid)
                 .reduce((sum, item) => sum + item.actual, 0);
                 
-            const totalFlexible = flexibleLoans
+            const totalSemiMonthly = semiMonthlyExpenses // Renamed
                 .filter(item => item.isPaid)
                 .reduce((sum, item) => sum + item.actual, 0);
                 
             const totalVariable = variableExpenses.reduce((sum, item) => sum + item.amount, 0);
             
-            const totalExpenses = totalRecurring + totalFlexible + totalVariable;
+            const totalExpenses = totalRecurring + totalSemiMonthly + totalVariable; // Updated
             const netIncome = totalIncome - totalExpenses;
 
             // --- Table Builders ---
@@ -716,8 +760,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${(income.payout1.isPaid ? renderRow('Payout 1', income.payout1.actual) : '')}
-                            ${(income.payout2.isPaid ? renderRow('Payout 2', income.payout2.actual) : '')}
+                            ${(income.payout1.isPaid ? renderRow(state.settings.payout1Label, income.payout1.actual) : '')}
+                            ${(income.payout2.isPaid ? renderRow(state.settings.payout2Label, income.payout2.actual) : '')}
                             ${renderHeaderRow('Total Income', totalIncome)}
                         </tbody>
                     </table>
@@ -733,9 +777,9 @@
                             ${recurringExpenses.filter(i => i.isPaid).map(item => renderRow(item.name, item.actual)).join('')}
                             <tr class="border-t"><td class="py-1 pr-4 text-gray-600 font-semibold text-right">Subtotal</td><td class="py-1 text-right font-semibold">${formatCurrency(totalRecurring)}</td></tr>
                             
-                            <tr class="font-medium bg-gray-50"><td class="py-1 px-2 mt-2" colspan="2">Flexible Loans</td></tr>
-                            ${flexibleLoans.filter(i => i.isPaid).map(item => renderRow(item.name, item.actual)).join('')}
-                            <tr class="border-t"><td class="py-1 pr-4 text-gray-600 font-semibold text-right">Subtotal</td><td class="py-1 text-right font-semibold">${formatCurrency(totalFlexible)}</td></tr>
+                            <tr class="font-medium bg-gray-50"><td class="py-1 px-2 mt-2" colspan="2">Semi-Monthly Expenses</td></tr>
+                            ${semiMonthlyExpenses.filter(i => i.isPaid).map(item => renderRow(item.name, item.actual)).join('')}
+                            <tr class="border-t"><td class="py-1 pr-4 text-gray-600 font-semibold text-right">Subtotal</td><td class="py-1 text-right font-semibold">${formatCurrency(totalSemiMonthly)}</td></tr>
 
                             <tr class="font-medium bg-gray-50"><td class="py-1 px-2 mt-2" colspan="2">Daily & Unplanned Expenses</td></tr>
                             ${variableExpenses.map(item => renderRow(item.name, item.amount)).join('')}
@@ -812,10 +856,10 @@
                 document.getElementById('save-income-settings').onclick = handleIncomeSettingsSave;
                 
                 document.querySelectorAll('.template-add').forEach(btn => {
-                    btn.onclick = (e) => handleTemplateAdd(e.currentTarget.dataset.key);
+                    btn.onclick = (e) => handleTemplateAdd(e.currentTarget.dataset.key, e.currentTarget.dataset.isFixed === 'true');
                 });
                 document.querySelectorAll('.template-edit').forEach(btn => {
-                    btn.onclick = (e) => handleTemplateEdit(e.currentTarget.dataset.key, e.currentTarget.dataset.id);
+                    btn.onclick = (e) => handleTemplateEdit(e.currentTarget.dataset.key, e.currentTarget.dataset.id, e.currentTarget.dataset.isFixed === 'true');
                 });
                 document.querySelectorAll('.template-delete').forEach(btn => {
                     btn.onclick = (e) => handleTemplateDelete(e.currentTarget.dataset.key, e.currentTarget.dataset.id);
@@ -980,46 +1024,52 @@
         async function handleIncomeSettingsSave() {
             const payout1 = Number(document.getElementById('setting-payout1').value);
             const payout2 = Number(document.getElementById('setting-payout2').value);
+            const payout1Label = document.getElementById('setting-payout1-label').value;
+            const payout2Label = document.getElementById('setting-payout2-label').value;
             
             await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main'), {
                 avgPayout1: payout1,
-                avgPayout2: payout2
+                avgPayout2: payout2,
+                payout1Label: payout1Label,
+                payout2Label: payout2Label
             });
         }
         
         /** Show template add modal */
-        function handleTemplateAdd(key) {
+        function handleTemplateAdd(key, isFixedExpense) {
             const newItem = {
                 id: `tpl-${new Date().getTime()}`,
                 name: "",
                 expected: 0,
-                monthlyDueDate: key === 'recurringTemplate' ? '' : undefined,
-                endTerm: key === 'recurringTemplate' ? '' : undefined,
+                paymentType: 'monthly', // Default to monthly
+                dueMonth: '',
+                monthlyDueDate: isFixedExpense ? '' : undefined,
+                endTerm: isFixedExpense ? '' : undefined,
             };
-            showTemplateModal(key, newItem, true);
+            showTemplateModal(key, newItem, true, isFixedExpense);
         }
         
         /** Show template edit modal */
-        function handleTemplateEdit(key, id) {
+        function handleTemplateEdit(key, id, isFixedExpense) {
             const item = state.settings[key].find(i => i.id === id);
-            showTemplateModal(key, item, false);
+            showTemplateModal(key, item, false, isFixedExpense);
         }
 
         /** Save template modal form */
         async function handleTemplateSave(e) {
             e.preventDefault();
-            const { key, id, isNew } = e.target.dataset;
-            
+            const { key, id, isNew, isFixed } = e.target.dataset;
+            const isFixedExpense = isFixed === 'true';
+
             const updatedItem = {
                 id: id,
                 name: document.getElementById('template-name').value,
                 expected: Number(document.getElementById('template-expected').value),
+                paymentType: document.getElementById('template-payment-type').value,
+                dueMonth: document.getElementById('template-due-month')?.value || '',
+                monthlyDueDate: isFixedExpense ? document.getElementById('template-due-date')?.value || '' : undefined,
+                endTerm: isFixedExpense ? document.getElementById('template-end-term')?.value || '' : undefined,
             };
-            
-            if (key === 'recurringTemplate') {
-                updatedItem.monthlyDueDate = document.getElementById('template-due-date').value;
-                updatedItem.endTerm = document.getElementById('template-end-term').value;
-            }
             
             let updatedItems;
             if (isNew === 'true') {
@@ -1076,7 +1126,7 @@
         /** Shows the form for editing an income payout */
         function showPayoutModal(payoutKey) {
             const payout = state.currentBudget.income[payoutKey];
-            const title = payoutKey === 'payout1' ? 'Payout 1' : 'Payout 2';
+            const title = payoutKey === 'payout1' ? state.settings.payout1Label : state.settings.payout2Label;
             const amount = payout.isPaid ? payout.actual : payout.expected;
             
             const content = `
@@ -1119,30 +1169,55 @@
         }
 
         /** Shows the form for adding/editing a template item */
-        function showTemplateModal(key, item, isNew = false) {
-            const isFixedExpense = key === 'recurringTemplate';
+        function showTemplateModal(key, item, isNew = false, isFixedExpense = false) {
             const title = isNew ? 'Add New' : 'Edit';
             
-            const content = `
-                <form id="template-modal-form" data-key="${key}" data-id="${item.id}" data-is-new="${isNew}">
+            // This local state will track the selected payment type to show/hide fields
+            let currentPaymentType = item.paymentType || 'monthly';
+            
+            const getModalContent = (paymentType) => `
+                <form id="template-modal-form" data-key="${key}" data-id="${item.id}" data-is-new="${isNew}" data-is-fixed="${isFixedExpense}">
                     <h3 class="text-lg font-medium mb-4">${title} Item</h3>
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium mb-1">Name</label>
-                            <input type="text" id="template-name" value="${item.name}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
+                            <input type="text" id="template-name" value="${item.name || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
                         </div>
                         <div>
                             <label class="block text-sm font-medium mb-1">Expected Amount (Monthly Due)</label>
-                            <input type="number" id="template-expected" value="${item.expected}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
+                            <input type="number" id="template-expected" value="${item.expected || 0}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
                         </div>
-                        ${isFixedExpense ? `
+                        
+                        <!-- NEW: Payment Type Selector -->
                         <div>
-                            <label class="block text-sm font-medium mb-1">Monthly Due Date (e.g., "15th")</label>
-                            <input type="text" id="template-due-date" value="${item.monthlyDueDate}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                            <label class="block text-sm font-medium mb-1">Payment Type</label>
+                            <select id="template-payment-type" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="monthly" ${paymentType === 'monthly' ? 'selected' : ''}>Monthly Bill</option>
+                                <option value="oneTime" ${paymentType === 'oneTime' ? 'selected' : ''}>One-Time Expense</option>
+                            </select>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-1">End Term (Month/Year)</label>
-                            <input type="month" id="template-end-term" value="${item.endTerm}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+
+                        <!-- Conditional fields for "Monthly Bill" -->
+                        ${paymentType === 'monthly' && isFixedExpense ? `
+                        <div id="monthly-fields">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Monthly Due Date (e.g., "15th")</label>
+                                <input type="text" id="template-due-date" value="${item.monthlyDueDate || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">End Term (Optional)</label>
+                                <input type="month" id="template-end-term" value="${item.endTerm || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- Conditional fields for "One-Time Expense" -->
+                        ${paymentType === 'oneTime' ? `
+                        <div id="one-time-fields">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Due Month (YYYY-MM)</label>
+                                <input type="month" id="template-due-month" value="${item.dueMonth || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
+                            </div>
                         </div>
                         ` : ''}
                     </div>
@@ -1152,7 +1227,33 @@
                     </div>
                 </form>
             `;
-            showModal(content);
+            
+            showModal(getModalContent(currentPaymentType));
+            
+            // Add listener to re-render modal on type change
+            document.getElementById('template-payment-type').onchange = (e) => {
+                currentPaymentType = e.target.value;
+                // Preserve form data
+                item.name = document.getElementById('template-name').value;
+                item.expected = Number(document.getElementById('template-expected').value);
+                if (document.getElementById('template-due-date')) {
+                    item.monthlyDueDate = document.getElementById('template-due-date').value;
+                }
+                if (document.getElementById('template-end-term')) {
+                    item.endTerm = document.getElementById('template-end-term').value;
+                }
+                 if (document.getElementById('template-due-month')) {
+                    item.dueMonth = document.getElementById('template-due-month').value;
+                }
+                
+                showModal(getModalContent(currentPaymentType)); // Re-render
+                
+                // Re-attach listeners after re-render
+                document.getElementById('modal-cancel').onclick = hideModal;
+                document.getElementById('template-modal-form').onsubmit = handleTemplateSave;
+                document.getElementById('template-payment-type').onchange = arguments.callee; // Re-attach self
+            };
+
             document.getElementById('modal-cancel').onclick = hideModal;
             document.getElementById('template-modal-form').onsubmit = handleTemplateSave;
         }
@@ -1161,16 +1262,31 @@
 
         /** Creates a new budget doc for the month based on settings */
         async function createNewMonthBudget(monthId, settingsDoc) {
+            
+            const allTemplateExpenses = [
+                ...settingsDoc.recurringTemplate, 
+                ...settingsDoc.semiMonthlyExpensesTemplate
+            ];
+
+            const newRecurring = settingsDoc.recurringTemplate
+                .filter(item => item.paymentType === 'monthly' || (item.paymentType === 'oneTime' && item.dueMonth === monthId))
+                .map(item => ({ ...item, actual: 0, isPaid: false }));
+                
+            const newSemiMonthly = settingsDoc.semiMonthlyExpensesTemplate
+                .filter(item => item.paymentType === 'monthly' || (item.paymentType === 'oneTime' && item.dueMonth === monthId))
+                .map(item => ({ ...item, actual: 0, isPaid: false }));
+
             const newBudget = {
                 month: monthId,
                 income: {
                     payout1: { expected: settingsDoc.avgPayout1, actual: 0, isPaid: false },
                     payout2: { expected: settingsDoc.avgPayout2, actual: 0, isPaid: false },
                 },
-                recurringExpenses: settingsDoc.recurringTemplate.map(item => ({ ...item, actual: 0, isPaid: false })),
-                flexibleLoans: settingsDoc.flexibleLoansTemplate.map(item => ({ ...item, actual: 0, isPaid: false })),
+                recurringExpenses: newRecurring,
+                semiMonthlyExpenses: newSemiMonthly,
                 variableExpenses: [],
             };
+            
             try {
                 // Set the new budget
                 await setDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', monthId), newBudget);
@@ -1255,8 +1371,10 @@
                     const defaultSettings = {
                         avgPayout1: 19000,
                         avgPayout2: 19000,
+                        payout1Label: "Payout 1 (10th)",
+                        payout2Label: "Payout 2 (25th)",
                         recurringTemplate: [],
-                        flexibleLoansTemplate: [],
+                        semiMonthlyExpensesTemplate: [], // Renamed
                     };
                     await setDoc(settingsRef, defaultSettings);
                     state.settings = defaultSettings;
