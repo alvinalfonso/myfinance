@@ -578,6 +578,13 @@
             
             if (!state.isAuthReady || !state.userId) {
                 appRoot.innerHTML = renderLoginScreen();
+                // --- FIX: Attach the sign-in button listener ---
+                // This listener was missing, which is why the button did nothing.
+                const googleSignInBtn = document.getElementById('google-signin-btn');
+                if (googleSignInBtn) {
+                    googleSignInBtn.addEventListener('click', signInWithGoogle);
+                }
+                // --- End Fix ---
                 return;
             }
 
