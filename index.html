@@ -39,533 +39,581 @@
                 width: 100%;
             }
             .no-print {
-                display: none;
+                display: none !important;
             }
+        }
+        
+        /* Custom button styles for better visibility */
+        .btn {
+            @apply text-sm px-3 py-1.5 rounded-lg shadow-sm transition-all duration-150;
+        }
+        .btn-primary {
+            @apply bg-blue-600 text-white hover:bg-blue-700;
+        }
+        .btn-secondary {
+            @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
+        }
+        .btn-danger {
+            @apply bg-red-600 text-white hover:bg-red-700;
+        }
+        .btn-success {
+             @apply bg-green-600 text-white hover:bg-green-700;
+        }
+        .btn-warning {
+            @apply bg-yellow-500 text-gray-900 hover:bg-yellow-600;
+        }
+        
+        /* Ensure inputs are consistent */
+        .form-input {
+            @apply w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500;
+        }
+        .form-select {
+             @apply w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white;
+        }
+        
+        /* Card styles */
+        .card {
+            @apply bg-white shadow-lg rounded-xl p-6;
         }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800">
+<body class="bg-gray-100">
 
-    <!-- 3. Root container where the app will be rendered -->
-    <div id="app-root"></div>
-
-    <!-- 4. Modal container, hidden by default -->
-    <div id="modal-container" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop hidden no-print">
-        <div id="modal-content" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <!-- Modal content will be injected here by JavaScript -->
-        </div>
+    <!-- Main Application Root -->
+    <div id="app-root">
+        <!-- App content will be rendered here by JavaScript -->
     </div>
 
-    <!-- 5. Firebase and App Logic -->
+    <!-- 
+      MODALS SECTION
+      These are hidden by default and shown by JavaScript.
+    -->
+    
+    <!-- Edit Expense Modal (for Daily/Unplanned) -->
+    <div id="edit-expense-modal" class="no-print modal-backdrop fixed inset-0 flex items-center justify-center p-4 hidden z-50">
+        <div class="card w-full max-w-md">
+            <h2 class="text-xl font-bold mb-4">Edit Expense</h2>
+            <form id="edit-expense-form">
+                <input type="hidden" id="edit-expense-id">
+                <input type="hidden" id="edit-expense-type">
+                <input type="hidden" id="edit-expense-month">
+                
+                <div class="mb-4">
+                    <label for="edit-expense-name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                    <input type="text" id="edit-expense-name" class="form-input" required>
+                </div>
+                <div class="mb-4">
+                    <label for="edit-expense-amount" class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                    <input type="number" id="edit-expense-amount" step="0.01" class="form-input" required>
+                </div>
+                <div class="mb-4">
+                    <label for="edit-expense-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input type="date" id="edit-expense-date" class="form-input" required>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button type="button" id="cancel-edit-btn" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Confirm Deletion Modal -->
+    <div id="confirm-delete-modal" class="no-print modal-backdrop fixed inset-0 flex items-center justify-center p-4 hidden z-50">
+        <div class="card w-full max-w-sm">
+            <h2 class="text-xl font-bold mb-2">Are you sure?</h2>
+            <p class="text-gray-600 mb-6">This action cannot be undone.</p>
+            <div class="flex justify-end gap-3">
+                <button type="button" id="cancel-delete-btn" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="confirm-delete-btn" class="btn btn-danger">Delete</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 
+      END MODALS SECTION
+    -->
+
+
+    <!-- 3. Load Firebase Services -->
     <script type="module">
-        // --- Firebase SDK Imports ---
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-analytics.js";
+        // Firebase and Firestore imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { 
             getAuth, 
+            signInAnonymously, // Keeping the import just in case, but not using it for the button
+            signInWithCustomToken, 
             onAuthStateChanged,
-            signOut,
-            GoogleAuthProvider,
-            signInWithPopup // Using Popup as requested
-        } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
+            GoogleAuthProvider, // <-- ADDED
+            signInWithPopup     // <-- ADDED
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
             doc, 
-            setDoc, 
             getDoc, 
+            setDoc, 
             onSnapshot,
-            updateDoc,
-            arrayUnion,
-            arrayRemove,
-            collection, // Needed for reports
-            query, // Needed for reports
-            where, // Needed for reports
-            getDocs // Needed for reports
-        } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
-        
-        // --- Lucide Icons (as functions) ---
-        const icons = {
-            home: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`,
-            trendingUp: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>`,
-            settings: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73v.18a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>`,
-            clipboard: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path></svg>`, // New icon for Reports
-            logOut: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>`,
-            dollarSign: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 mr-1"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>`,
-            creditCard: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 mr-1"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>`,
-            plus: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
-            trash2: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
-            calendarDays: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 mr-1"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>`,
-            clipboardEdit: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M14.39 16.61.7 10.93a1 1 0 0 1 0-1.42l.7-.7a1 1 0 0 1 1.42 0l5.66 5.66"></path><path d="m14 17 5.66-5.66a1 1 0 0 1 1.42 0l.7.7a1 1 0 0 1 0 1.42L15.42 19.5a1 1 0 0 1-1.42 0"></path></svg>`,
-            x: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
-            google: `<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-2"><title>Google</title><path d="M12.48 10.92v3.28h7.84c-.24 1.54-.88 2.76-1.9 3.55l2.6 2.04c2-1.84 3.22-4.48 3.22-7.58 0-5.74-4.42-10.4-10-10-5.52 0-10 4.48-10 10s4.48 10 10 10c2.18 0 4.16-.76 5.74-2.04l-2.6-2.04c-.6.44-1.48.76-2.6.76-3.3 0-6-2.68-6-6s2.7-6 6-6c1.66 0 3.14.68 4.2 1.72l2.54-2.54C16.6 2.76 14.58 2 12.48 2z" fill="#4285F4"></path></svg>`,
-            printer: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 mr-2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect width="12" height="8" x="6" y="14"></rect></svg>` // New icon for Print
-        };
+            setLogLevel
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- Firebase Config & App State ---
-        
-        // This is YOUR personal config that you provided
-        const firebaseConfig = {
-            apiKey: "AIzaSyDllC4nXTDgtMMfw6CO0t92j820SOY7MPQ",
-            authDomain: "my-budget-tracker-23b15.firebaseapp.com",
-            projectId: "my-budget-tracker-23b15",
-            storageBucket: "my-budget-tracker-23b15.firebasestorage.app",
-            messagingSenderId: "341614311933",
-            appId: "1:341614311933:web:32b48db5576be8d7fb0194",
-            measurementId: "G-44L5LDN7MW"
-        };
-        
-        // This 'appId' is for the database path, not Firebase config.
-        const appId = 'default-app-id'; // Use a stable ID for your GitHub Pages app
-
-        let auth, db, app, analytics, googleProvider;
-        
-        // Global state object
+        // --- GLOBAL STATE ---
+        // This object holds all our application's data
         const state = {
-            view: 'tracker', // tracker, settings, forecast, reports
-            currentMonthId: getMonthId(),
-            settings: null,
-            currentBudget: null,
+            app: null,
+            db: null,
+            auth: null,
             userId: null,
-            isAuthReady: false, // This now means "is user logged in?"
-            loading: true,
-            unsubSettings: () => {},
-            unsubBudget: () => {},
+            isAuthReady: false, // Becomes true after auth state is confirmed
+            loading: true, // True while app is booting
+            
+            // Firestore data listeners
+            unsubSettings: () => {}, // Function to unsubscribe from settings listener
+            unsubBudget: () => {},   // Function to unsubscribe from budget listener
+
+            // App Data
+            settings: {
+                username: "User",
+                currency: "USD",
+            },
+            budget: {
+                // Stores income by month, e.g., "2025-11": 3000
+                income: {}, 
+                // Stores all expense *templates*
+                expenses: {
+                    monthly: [], // { id, name, amount, category, dayOfMonth, payments: {"2025-11": {paidOn, amount}} }
+                    semiMonthly: [], // { id, name, amount, category, dayOfMonth1, dayOfMonth2, payments: {"2025-11-1": {paidOn, amount}} }
+                    daily: {}, // e.g., "2025-11": [ { id, name, amount, category, date } ]
+                    unplanned: {} // e.g., "2025-11": [ { id, name, amount, category, date } ]
+                }
+            },
+            
+            // UI State
+            currentView: "dashboard", // 'dashboard', 'expenses', 'report', 'settings'
+            currentDate: new Date(),
+            
+            get currentYearMonth() {
+                // Returns "YYYY-MM" format
+                return this.currentDate.toISOString().slice(0, 7);
+            }
         };
 
-        // --- DOM Elements ---
-        const appRoot = document.getElementById('app-root');
-        const modalContainer = document.getElementById('modal-container');
-        const modalContent = document.getElementById('modal-content');
+        // --- DOM ELEMENTS ---
+        const appRoot = document.getElementById("app-root");
+        const editExpenseModal = document.getElementById("edit-expense-modal");
+        const confirmDeleteModal = document.getElementById("confirm-delete-modal");
 
-        // --- Helper Functions ---
-        function getMonthId(date = new Date()) {
-            return date.toISOString().slice(0, 7); // "YYYY-MM"
-        }
-
-        function getNextMonthId(monthId, increment = 1) {
-            const [year, month] = monthId.split('-').map(Number);
-            const date = new Date(year, month - 1, 1);
-            date.setMonth(date.getMonth() + increment);
-            return getMonthId(date);
-        }
-
-        function formatCurrency(amount) {
-            return new Intl.NumberFormat('en-PH', {
-                style: 'currency',
-                currency: 'PHP',
-            }).format(amount);
-        }
-
-        // --- Render Functions ---
-
-        /** Renders the new Login Screen */
-        function renderLoginScreen() {
-             appRoot.innerHTML = `
-                <div class="flex items-center justify-center min-h-screen bg-gray-100">
-                    <div class="bg-white shadow-xl rounded-lg p-8 w-full max-w-md mx-4 text-center">
-                        <h2 class="text-2xl font-bold text-blue-700 mb-4">Welcome to Your Budget Tracker</h2>
-                        <p class="text-sm text-gray-600 mb-8">
-                            Sign in with your Google account to securely access and sync your budget.
-                        </p>
-                        <button id="google-signin-button" class="w-full font-medium rounded-lg transition-colors bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 shadow-sm px-4 py-3 text-base flex items-center justify-center">
-                            ${icons.google}
-                            Sign in with Google
-                        </button>
-                    </div>
-                </div>
-            `;
-            document.getElementById('google-signin-button').onclick = handleGoogleSignIn;
+        // --- UTILITY FUNCTIONS ---
+        
+        /**
+         * Formats a number as a currency string.
+         */
+        function formatCurrency(amount, currency = state.settings.currency) {
+            try {
+                return new Intl.NumberFormat(undefined, {
+                    style: "currency",
+                    currency: currency,
+                    minimumFractionDigits: 2,
+                }).format(amount);
+            } catch (error) {
+                // Fallback for invalid currency
+                console.warn("Invalid currency code:", currency, "falling back to USD.");
+                return new Intl.NumberFormat(undefined, {
+                    style: "currency",
+                    currency: "USD",
+                    minimumFractionDigits: 2,
+                }).format(amount);
+            }
         }
         
-        /** Renders the entire application based on the current state */
-        function renderApp() {
-            // If user is not logged in, show the login screen.
-            if (!state.isAuthReady) {
-                renderLoginScreen();
-                return;
+        /**
+         * Gets the current "YYYY-MM" string.
+         */
+        function getCurrentYearMonth() {
+            return state.currentDate.toISOString().slice(0, 7);
+        }
+        
+        /**
+         * Gets the month and year as a string, e.g., "November 2025"
+         */
+        function getMonthYearString(date) {
+            return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        }
+        
+        /**
+         * Debounce function to limit rapid calls
+         */
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+
+        // --- FIRESTORE FUNCTIONS ---
+
+        /**
+         * Saves the current settings object to Firestore.
+         */
+        async function saveSettings() {
+            if (!state.userId) return;
+            const settingsRef = doc(state.db, "users", state.userId, "app", "settings");
+            try {
+                await setDoc(settingsRef, state.settings);
+                console.log("Settings saved.");
+            } catch (error)
+            {
+                console.error("Error saving settings:", error);
             }
+        }
+        
+        /**
+         * Saves the current budget object to Firestore.
+         * Debounced to prevent rapid writes.
+         */
+        const saveBudget = debounce(async () => {
+            if (!state.userId) return;
+            const budgetRef = doc(state.db, "users", state.userId, "app", "budget");
+            try {
+                // We save the entire budget object
+                await setDoc(budgetRef, state.budget);
+                console.log("Budget saved.");
+            } catch (error)
+            {
+                console.error("Error saving budget:", error);
+            }
+        }, 1500); // Wait 1.5s after the last change to save
+
+
+        /**
+         * Attaches realtime listeners to Firestore data.
+         */
+        function attachDataListeners() {
+            if (!state.userId) return;
+
+            // Detach old listeners first
+            state.unsubSettings();
+            state.unsubBudget();
+
+            // --- Settings Listener ---
+            const settingsRef = doc(state.db, "users", state.userId, "app", "settings");
+            state.unsubSettings = onSnapshot(settingsRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    state.settings = docSnap.data();
+                } else {
+                    // No settings, save the defaults
+                    saveSettings();
+                }
+                // Update loading state and render
+                state.loading = false;
+                renderApp();
+            }, (error) => {
+                console.error("Error fetching settings:", error);
+                state.loading = false;
+                renderApp();
+            });
+
+            // --- Budget Listener ---
+            const budgetRef = doc(state.db, "users", state.userId, "app", "budget");
+            state.unsubBudget = onSnapshot(budgetRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const budgetData = docSnap.data();
+                    // Ensure all keys exist to prevent errors
+                    state.budget = {
+                        income: budgetData.income || {},
+                        expenses: {
+                            monthly: budgetData.expenses?.monthly || [],
+                            semiMonthly: budgetData.expenses?.semiMonthly || [],
+                            daily: budgetData.expenses?.daily || {},
+                            unplanned: budgetData.expenses?.unplanned || {}
+                        }
+                    };
+                } else {
+                    // No budget, create a default one
+                    const initialBudget = {
+                        income: { [getCurrentYearMonth()]: 0 },
+                        expenses: {
+                            monthly: [],
+                            semiMonthly: [],
+                            daily: { [getCurrentYearMonth()]: [] },
+                            unplanned: { [getCurrentYearMonth()]: [] }
+                        }
+                    };
+                    state.budget = initialBudget;
+                    // Save this initial budget
+                    saveBudget();
+                }
+                // Update loading state and render
+                state.loading = false;
+                renderApp();
+            }, (error) => {
+                console.error("Error fetching budget:", error);
+                state.loading = false;
+                renderApp();
+            });
+        }
+        
+        
+        // --- DATA CALCULATION ---
+        
+        /**
+         * Calculates all dashboard stats for the current month.
+         */
+        function calculateCurrentMonthStats() {
+            const yearMonth = getCurrentYearMonth();
+            const income = state.budget.income[yearMonth] || 0;
             
-            // If user is logged in, but data is loading, show loading screen.
+            let totalPaid = 0; // Total of *paid* monthly/semi-monthly bills
+            let totalPending = 0; // Total of *unpaid* monthly/semi-monthly bills
+            
+            // 1. Calculate Monthly Bill Payments
+            state.budget.expenses.monthly.forEach(expense => {
+                const paymentKey = yearMonth;
+                const payment = (expense.payments && expense.payments[paymentKey]) ? expense.payments[paymentKey] : null;
+                
+                if (payment) {
+                    totalPaid += payment.amount;
+                } else {
+                    totalPending += expense.amount;
+                }
+            });
+            
+            // 2. Calculate Semi-Monthly Bill Payments
+            state.budget.expenses.semiMonthly.forEach(expense => {
+                const paymentKey1 = `${yearMonth}-1`;
+                const paymentKey2 = `${yearMonth}-2`;
+                
+                const payment1 = (expense.payments && expense.payments[paymentKey1]) ? expense.payments[paymentKey1] : null;
+                const payment2 = (expense.payments && expense.payments[paymentKey2]) ? expense.payments[paymentKey2] : null;
+
+                if (payment1) {
+                    totalPaid += payment1.amount;
+                } else {
+                    totalPending += expense.amount; // `amount` is per-payment
+                }
+                
+                if (payment2) {
+                    totalPaid += payment2.amount;
+                } else {
+                    totalPending += expense.amount; // `amount` is per-payment
+                }
+            });
+            
+            // 3. Calculate Daily Expenses
+            const dailyExpenses = state.budget.expenses.daily[yearMonth] || [];
+            const totalDaily = dailyExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+            
+            // 4. Calculate Unplanned Expenses
+            const unplannedExpenses = state.budget.expenses.unplanned[yearMonth] || [];
+            const totalUnplanned = unplannedExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+            // Total spent is paid bills + daily + unplanned
+            const totalExpenses = totalPaid + totalDaily + totalUnplanned;
+            const remainingBalance = income - totalExpenses;
+            
+            return {
+                income,
+                totalExpenses,
+                remainingBalance,
+                totalPaid, // Paid bills
+                totalPending, // Unpaid bills
+                totalDaily,
+                totalUnplanned,
+                currency: state.settings.currency
+            };
+        }
+
+
+        // --- RENDER FUNCTIONS ---
+
+        /**
+         * Main render function for the entire application.
+         */
+        function renderApp() {
             if (state.loading) {
                 appRoot.innerHTML = renderLoadingScreen();
                 return;
             }
-
-            const nav = renderNavigation();
-            let mainContent = '';
-
-            if (state.view === 'tracker' && state.currentBudget) {
-                mainContent = renderMonthlyTracker();
-            } else if (state.view === 'settings' && state.settings) {
-                mainContent = renderSettingsView();
-            } else if (state.view === 'forecast' && state.currentBudget && state.settings) {
-                mainContent = renderForecastView();
-            } else if (state.view === 'reports') {
-                mainContent = renderReportsView(); // New View
-            } else if (!state.currentBudget && state.view === 'tracker') {
-                // Handle case where budget is still loading or being created
-                mainContent = renderLoadingScreen();
+            
+            if (!state.userId) {
+                appRoot.innerHTML = renderLoginScreen();
+                return;
             }
 
+            // Main app structure
             appRoot.innerHTML = `
-                <div class="no-print">
-                    ${nav}
+                <div classclass="min-h-screen flex flex-col lg:flex-row">
+                    <!-- Navigation -->
+                    ${renderNavigation()}
+                    
+                    <!-- Main Content -->
+                    <main class="flex-1 p-4 sm:p-6 lg:p-8">
+                        ${renderCurrentView()}
+                    </main>
                 </div>
-                <main class="p-4 md:p-8">
-                    ${mainContent}
-                </main>
             `;
             
-            // Re-attach event listeners
-            attachNavListeners();
-            attachMainListeners();
+            // Add event listeners for the rendered content
+            addAppEventListeners();
         }
-
-        /** Renders the top navigation bar */
-        function renderNavigation() {
+        
+        /**
+         * Renders the current view based on state.currentView.
+         */
+        function renderCurrentView() {
+            switch (state.currentView) {
+                case 'dashboard':
+                    return renderDashboard();
+                case 'expenses':
+                    return renderExpenses();
+                case 'report':
+                    return renderReport();
+                case 'settings':
+                    return renderSettings();
+                default:
+                    return renderDashboard();
+            }
+        }
+        
+        /**
+         * Renders a loading spinner.
+         */
+        function renderLoadingScreen() {
             return `
-                <header class="bg-white shadow-md p-4 flex justify-between items-center no-print">
-                    <h1 class="text-2xl font-bold text-blue-700">Personal Financial Tracker</h1>
-                    <nav class="flex items-center space-x-2">
-                        <button data-view="tracker" class="nav-button p-2 rounded-lg ${state.view === 'tracker' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}">${icons.home}</button>
-                        <button data-view="forecast" class="nav-button p-2 rounded-lg ${state.view === 'forecast' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}">${icons.trendingUp}</button>
-                        <button data-view="reports" class="nav-button p-2 rounded-lg ${state.view === 'reports' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}">${icons.clipboard}</button>
-                        <button data-view="settings" class="nav-button p-2 rounded-lg ${state.view === 'settings' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}">${icons.settings}</button>
-                        <button id="sign-out-button" title="Sign Out" class="p-2 rounded-lg text-red-600 hover:bg-red-100">
-                            ${icons.logOut}
-                        </button>
-                    </nav>
-                </header>
+                <div class="flex items-center justify-center min-h-screen">
+                    <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
             `;
         }
         
-        /** Renders the loading screen */
-        function renderLoadingScreen() {
+        /**
+         * Renders the login UI (which is just a button for anonymous login).
+         */
+        function renderLoginScreen() {
             return `
-                <div class="flex items-center justify-center min-h-screen bg-gray-100 no-print">
-                    <div class="flex flex-col items-center">
-                        <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span class="mt-2 text-lg text-gray-700">Loading Your Financials...</span>
+                <div class="flex items-center justify-center min-h-screen bg-gray-100">
+                    <div class="card text-center shadow-xl p-8">
+                        <h1 class="text-3xl font-bold text-gray-800 mb-4">Welcome</h1>
+                        <p class="text-gray-600 mb-8">Sign in with Google to track your finances.</p>
+                        <button id="google-login-btn" class="flex items-center justify-center gap-2 btn bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 w-full text-lg py-2">
+                            <svg class="w-6 h-6" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.73-2.99-.73-4.59s.25-3.14.73-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path><path fill="none" d="M0 0h48v48H0z"></path></svg>
+                            Sign In with Google
+                        </button>
                     </div>
                 </div>
             `;
         }
-
-        /** Renders the main tracker view */
-        function renderMonthlyTracker() {
-            const getMonthOptions = () => {
-                let options = '';
-                const today = new Date();
-                for (let i = -6; i <= 6; i++) {
-                    const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
-                    const monthId = getMonthId(date);
-                    const selected = monthId === state.currentMonthId ? 'selected' : '';
-                    const label = new Date(monthId + '-02').toLocaleString('default', { month: 'long', year: 'numeric' });
-                    options += `<option value="${monthId}" ${selected}>${label}</option>`;
-                }
-                return options;
-            };
-
-            return `
-                <div class="space-y-6 no-print">
-                    <div class="flex justify-between items-center">
-                        <h2 class="text-3xl font-bold">Monthly Tracker</h2>
-                        <select id="month-select" class="p-2 border rounded-lg shadow-sm">
-                            ${getMonthOptions()}
-                        </select>
-                    </div>
-                    
-                    ${renderSummaryView(state.currentBudget)}
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        ${renderIncomeTracker(state.currentBudget, state.settings)}
-                        ${renderOtherExpensesTracker(state.currentBudget)}
-                        ${renderRecurringExpensesTracker(state.currentBudget, 'recurringExpenses', 'Fixed Monthly Expenses (Bills, Loans, etc.)')}
-                        ${renderRecurringExpensesTracker(state.currentBudget, 'semiMonthlyExpenses', 'Semi-Monthly Expenses')}
-                    </div>
-                </div>
-            `;
-        }
-
-        /** Renders the summary card */
-        function renderSummaryView(budget) {
-            const { income, recurringExpenses, semiMonthlyExpenses, variableExpenses } = budget;
-
-            // Handle cases where new fields might not exist on old data
-            const validRecurring = recurringExpenses || [];
-            const validSemiMonthly = semiMonthlyExpenses || [];
-            const validVariable = variableExpenses || [];
-
-            const totalExpectedIncome = (income.payout1.expected || 0) + (income.payout2.expected || 0);
-            const totalActualIncome = (income.payout1.isPaid ? income.payout1.actual : 0) + (income.payout2.isPaid ? income.payout2.actual : 0);
-
-            const totalExpectedExpenses = [...validRecurring, ...validSemiMonthly].reduce((sum, item) => sum + (item.expected || 0), 0);
-            const totalActualExpenses = 
-                [...validRecurring, ...validSemiMonthly].reduce((sum, item) => sum + (item.isPaid ? item.actual : 0), 0) +
-                validVariable.reduce((sum, item) => sum + (item.amount || 0), 0);
-                
-            const actualNet = totalActualIncome - totalActualExpenses;
-            const expectedNet = totalExpectedIncome - totalExpectedExpenses;
-
-            const remainingToPay = [...validRecurring, ...validSemiMonthly]
-                .filter(item => !item.isPaid)
-                .reduce((sum, item) => sum + (item.expected || 0), 0);
-                
-            const cashOnHand = totalActualIncome - totalActualExpenses;
-
-            const statBox = (title, value, color) => `
-                <div class="p-4 bg-gray-50 rounded-lg">
-                    <h4 class="text-sm font-medium text-gray-500">${title}</h4>
-                    <p class="text-2xl font-bold ${color}">${value}</p>
-                </div>`;
-
-            return `
-                <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                    <div class="p-4 md:p-6 border-b">
-                        <h3 class="text-xl font-semibold">Month Summary: ${new Date(budget.month + '-02').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
-                    </div>
-                    <div class="p-4 md:p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                        ${statBox('Cash on Hand', formatCurrency(cashOnHand), cashOnHand >= 0 ? 'text-green-600' : 'text-red-600')}
-                        ${statBox('Actual Net', formatCurrency(actualNet), actualNet >= 0 ? 'text-green-600' : 'text-red-600')}
-                        ${statBox('Remaining Bills', formatCurrency(remainingToPay), 'text-yellow-600')}
-                        ${statBox('Budgeted Net', formatCurrency(expectedNet), 'text-gray-600')}
-                    </div>
-                </div>
-            `;
-        }
-
-        /** Renders the income tracker card */
-        function renderIncomeTracker(budget, settings) {
-            const payoutItem = (payout, payoutKey, title) => {
-                if (payout.isPaid) {
-                    return `
-                        <div class="text-right">
-                            <span class="text-green-600 font-bold text-lg">${formatCurrency(payout.actual)}</span>
-                            <div class="flex items-center justify-end space-x-2">
-                                <button data-payout-key="${payoutKey}" class="payout-unpay text-xs text-yellow-600 hover:underline">Mark as Unpaid</button>
-                                <button data-payout-key="${payoutKey}" class="payout-edit text-xs text-blue-600 hover:underline">Edit</button>
-                            </div>
-                        </div>`;
-                } else {
-                    return `<button data-payout-key="${payoutKey}" class="payout-edit font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-2 py-1 text-xs flex items-center">${icons.dollarSign} Mark as Paid</button>`;
-                }
-            };
-
-            return `
-                <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                    <div class="p-4 md:p-6 border-b"><h3 class="text-xl font-semibold">Income</h3></div>
-                    <div class="p-4 md:p-6 space-y-4">
-                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                            <div>
-                                <h4 class="font-medium">${settings.payout1Label || 'Payout 1'}</h4>
-                                <span class="text-sm text-gray-500">Expected: ${formatCurrency(budget.income.payout1.expected)}</span>
-                            </div>
-                            ${payoutItem(budget.income.payout1, 'payout1', settings.payout1Label)}
-                        </div>
-                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                            <div>
-                                <h4 class="font-medium">${settings.payout2Label || 'Payout 2'}</h4>
-                                <span class="text-sm text-gray-500">Expected: ${formatCurrency(budget.income.payout2.expected)}</span>
-                            </div>
-                            ${payoutItem(budget.income.payout2, 'payout2', settings.payout2Label)}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        /** Renders the recurring expenses card */
-        function renderRecurringExpensesTracker(budget, expenseKey, title) {
-            const expenses = budget[expenseKey] || [];
+        
+        /**
+         * Renders the main navigation bar.
+         */
+        function renderNavigation() {
+            const getLinkClass = (view) => 
+                state.currentView === view
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-700 hover:bg-gray-200';
             
-            const expenseItems = expenses.map((item, index) => {
-                let paidStatus = '';
-                if (item.isPaid) {
-                    paidStatus = `
-                        <div class="text-right">
-                            <span class="text-red-600 font-bold text-lg">${formatCurrency(item.actual)}</span>
-                            <div class="flex items-center justify-end space-x-2">
-                                <button data-key="${expenseKey}" data-index="${index}" class="expense-unpay text-xs text-yellow-600 hover:underline">Mark as Unpaid</button>
-                                <button data-key="${expenseKey}" data-index="${index}" class="expense-edit text-xs text-blue-600 hover:underline">Edit</button>
-                            </div>
-                        </div>`;
-                } else {
-                    paidStatus = `<button data-key="${expenseKey}" data-index="${index}" class="expense-edit font-medium rounded-lg transition-colors bg-white text-blue-700 border border-blue-600 hover:bg-blue-50 px-2 py-1 text-xs flex items-center">${icons.creditCard} Pay</button>`;
-                }
-
-                // --- NEW UI LOGIC for payment types ---
-                let paymentTypeInfo = '';
-                if (item.paymentType === 'oneTime') {
-                    paymentTypeInfo = `<span class="ml-2 text-xs text-indigo-600">(One-Time, Due: ${item.dueMonth || 'N/A'})</span>`;
-                } else {
-                    // Default to "Monthly"
-                    paymentTypeInfo = `<span class="ml-2 text-xs text-green-600">(Monthly)</span>`;
-                }
-
-                return `
-                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                        <div>
-                            <h4 class="font-medium">${item.name} ${paymentTypeInfo}</h4>
-                            <span class="text-sm text-gray-500">Expected: ${formatCurrency(item.expected)}</span>
-                            ${(item.paymentType === 'monthly' || !item.paymentType) && item.monthlyDueDate ? `
-                                <div class="flex items-center text-xs text-blue-600 mt-1">
-                                    ${icons.calendarDays}
-                                    Due: ${item.monthlyDueDate}
-                                    ${item.endTerm ? `<span class="ml-2">| Ends: ${item.endTerm}</span>` : ''}
-                                </div>` : ''
-                            }
-                        </div>
-                        ${paidStatus}
-                    </div>
-                `;
-            }).join('');
-
             return `
-                <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                    <div class="p-4 md:p-6 border-b"><h3 class="text-xl font-semibold">${title}</h3></div>
-                    <div class="p-4 md:p-6 space-y-2">
-                        ${expenses.length === 0 ? `<p class="text-gray-500 text-sm">No ${title.toLowerCase()} configured. Go to Settings to add some.</p>` : expenseItems}
+                <nav class="no-print bg-white shadow-lg w-full lg:w-64">
+                    <div class="p-6">
+                        <h1 class="text-2xl font-bold text-blue-600">FinTracker</h1>
                     </div>
-                </div>
-            `;
-        }
-
-        /** Renders the "Daily & Unplanned Expenses" card */
-        function renderOtherExpensesTracker(budget) {
-            const variableExpenses = budget.variableExpenses || [];
-            const expenseItems = variableExpenses.map(item => `
-                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <div>
-                        <h4 class="font-medium">${item.name}</h4>
-                        <span class="text-sm text-gray-500">${new Date(item.date).toLocaleDateString()}</span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <span class="font-medium text-red-600">${formatCurrency(item.amount)}</span>
-                        <button data-id="${item.id}" class="variable-delete font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 p-2">
-                            ${icons.trash2}
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-
-            return `
-                <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                    <div class="p-4 md:p-6 border-b"><h3 class="text-xl font-semibold">Daily & Unplanned Expenses</h3></div>
-                    <div class="p-4 md:p-6">
-                        <form id="variable-expense-form" class="flex space-x-2 mb-4">
-                            <input type="text" id="variable-name" placeholder="Expense Name" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none flex-1" required />
-                            <input type="number" id="variable-amount" placeholder="Amount" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none w-28" required />
-                            <button type="submit" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 p-2">
-                                ${icons.plus}
+                    <ul class="space-y-2 p-4">
+                        <li>
+                            <button data-view="dashboard" class="nav-link w-full text-left px-4 py-2 rounded-lg ${getLinkClass('dashboard')}">
+                                Dashboard
                             </button>
-                        </form>
-                        <div class="space-y-2 max-h-60 overflow-y-auto pr-2">
-                            ${variableExpenses.length === 0 ? '<p class="text-gray-500 text-sm">No other expenses logged for this month.</p>' : expenseItems}
-                        </div>
-                    </div>
-                </div>
+                        </li>
+                        <li>
+                            <button data-view="expenses" class="nav-link w-full text-left px-4 py-2 rounded-lg ${getLinkClass('expenses')}">
+                                Expenses
+                            </button>
+                        </li>
+                        <li>
+                            <button data-view="report" class="nav-link w-full text-left px-4 py-2 rounded-lg ${getLinkClass('report')}">
+                                Report
+                            </button>
+                        </li>
+                        <li>
+                            <button data-view="settings" class="nav-link w-full text-left px-4 py-2 rounded-lg ${getLinkClass('settings')}">
+                                Settings
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
             `;
         }
-
-        /** Renders the settings view */
-        function renderSettingsView() {
-            // Ensure settings object has all new properties to avoid errors
-            const safeSettings = {
-                payout1Label: "Payout 1 (10th)",
-                avgPayout1: 19000,
-                payout2Label: "Payout 2 (25th)",
-                avgPayout2: 19000,
-                recurringTemplate: [],
-                semiMonthlyExpensesTemplate: [],
-                ...state.settings, // This will override defaults with saved values
-            };
-
+        
+        /**
+         * Renders the Dashboard view.
+         */
+        function renderDashboard() {
+            const stats = calculateCurrentMonthStats();
+            const yearMonth = getCurrentYearMonth();
+            const currentIncome = state.budget.income[yearMonth] || 0;
+            
             return `
-                <div class="space-y-6 max-w-4xl mx-auto no-print">
-                    <h2 class="text-3xl font-bold">Settings</h2>
+                <div class="max-w-7xl mx-auto">
+                    <!-- Header -->
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+                        <h1 class="text-3xl font-bold text-gray-800">
+                            Dashboard for ${getMonthYearString(state.currentDate)}
+                        </h1>
+                        <div class="flex gap-2 mt-4 sm:mt-0">
+                            <button id="prev-month-btn" class="btn btn-secondary">&lt; Prev</button>
+                            <button id="next-month-btn" class="btn btn-secondary">Next &gt;</button>
+                        </div>
+                    </div>
                     
-                    <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                        <div class="p-4 md:p-6 border-b"><h3 class="text-xl font-semibold">Income</h3></div>
-                        <div class="p-4 md:p-6 space-y-4">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">Payout 1 Label</label>
-                                    <input type="text" id="setting-payout1-label" value="${safeSettings.payout1Label}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">Average Payout 1 Amount</label>
-                                    <input type="number" id="setting-payout1" value="${safeSettings.avgPayout1}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">Payout 2 Label</label>
-                                    <input type="text" id="setting-payout2-label" value="${safeSettings.payout2Label}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium mb-1">Average Payout 2 Amount</label>
-                                    <input type="number" id="setting-payout2" value="${safeSettings.avgPayout2}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                                </div>
+                    <!-- Income Card -->
+                    <div class="card mb-6">
+                        <h2 class="text-xl font-semibold mb-3">Monthly Income</h2>
+                        <div class="flex items-center gap-4">
+                            <span class="text-3xl font-bold text-gray-700">${formatCurrency(currentIncome)}</span>
+                            <button id="edit-income-btn" class="btn btn-secondary">Edit</button>
+                        </div>
+                        <div id="edit-income-form" class="mt-4 hidden">
+                            <label for="income-input" class="text-sm text-gray-600">Set income for ${getMonthYearString(state.currentDate)}</label>
+                            <div class="flex gap-2 mt-1">
+                                <input type="number" id="income-input" class="form-input w-48" value="${currentIncome}" step="100">
+                                <button id="save-income-btn" class="btn btn-primary">Save</button>
+                                <button id="cancel-income-btn" class="btn btn-secondary">Cancel</button>
                             </div>
-                            <button id="save-income-settings" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save Income Settings</button>
                         </div>
                     </div>
-
-                    ${renderTemplateEditor('Fixed Monthly Expenses (Bills, Loans, etc.)', 'recurringTemplate', safeSettings.recurringTemplate, true)}
-                    ${renderTemplateEditor('Semi-Monthly Expenses', 'semiMonthlyExpensesTemplate', safeSettings.semiMonthlyExpensesTemplate, true)}
-                </div>
-            `;
-        }
-
-        /** Renders a template editor card for the settings page */
-        function renderTemplateEditor(title, key, items, isFixedExpense) {
-            const itemsHtml = (items || []).map(item => `
-                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <div>
-                        <h4 class="font-medium">${item.name}</h4>
-                        <span class="text-sm text-gray-500">Expected: ${formatCurrency(item.expected)}</span>
+                    
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="card bg-green-500 text-white">
+                            <h3 class="text-lg font-medium opacity-90">Remaining Balance</h3>
+                            <p class="text-4xl font-bold">${formatCurrency(stats.remainingBalance)}</p>
+                        </div>
+                        <div class="card bg-red-500 text-white">
+                            <h3 class="text-lg font-medium opacity-90">Total Spent</h3>
+                            <p class="text-4xl font-bold">${formatCurrency(stats.totalExpenses)}</p>
+                        </div>
+                        <div class="card bg-yellow-400 text-gray-900">
+                            <h3 class="text-lg font-medium opacity-90">Pending Bills</h3>
+                            <p class="text-4xl font-bold">${formatCurrency(stats.totalPending)}</p>
+                        </div>
                         
-                        <!-- NEW: Show payment type info -->
-                        ${item.paymentType === 'oneTime' ? `
-                            <div class="flex items-center text-xs text-indigo-600 mt-1">
-                                ${icons.calendarDays}
-                                One-Time, Due: ${item.dueMonth || 'N/A'}
+                        <div class="card col-span-1 md:col-span-2 lg:col-span-3">
+                            <h3 class="text-xl font-semibold mb-4">Expense Breakdown</h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div class="p-4 bg-gray-50 rounded-lg">
+                                    <h4 class="text-sm font-medium text-gray-500">Paid Bills</h4>
+                                    <p class="text-2xl font-semibold text-gray-800">${formatCurrency(stats.totalPaid)}</p>
+                                </div>
+                                <div class="p-4 bg-gray-50 rounded-lg">
+                                    <h4 class="text-sm font-medium text-gray-500">Daily Expenses</h4>
+                                    <p class="text-2xl font-semibold text-gray-800">${formatCurrency(stats.totalDaily)}</p>
+                                </div>
+                                <div class="p-4 bg-gray-50 rounded-lg">
+                                    <h4 class="text-sm font-medium text-gray-500">Unplanned</h4>
+                                    <p class="text-2xl font-semibold text-gray-800">${formatCurrency(stats.totalUnplanned)}</p>
+                                </div>
                             </div>
-                        ` : `
-                            ${item.monthlyDueDate ? `
-                                <div class="flex items-center text-xs text-blue-600 mt-1">
-                                    ${icons.calendarDays}
-                                    Monthly, Due: ${item.monthlyDueDate}
-                                    ${isFixedExpense && item.endTerm ? `<span class="ml-2">| Ends: ${item.endTerm}</span>` : ''}
-                                </div>` 
-                            : `<div class="flex items-center text-xs text-green-600 mt-1">Monthly</div>`
-                            }
-                        `}
-                    </div>
-                    <div class="flex space-x-1">
-                        <button data-key="${key}" data-id="${item.id}" data-is-fixed="${isFixedExpense}" class="template-edit font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 p-2">
-                            ${icons.clipboardEdit}
-                        </button>
-                        <button data-key="${key}" data-id="${item.id}" class="template-delete font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 p-2">
-                            ${icons.trash2}
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-
-            return `
-                <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                    <div class="p-4 md:p-6 border-b flex flex-row justify-between items-center">
-                        <h3 class="text-xl font-semibold">${title}</h3>
-                        <button data-key="${key}" data-is-fixed="${isFixedExpense}" class="template-add font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-2 py-1 text-xs flex items-center">
-                            ${icons.plus} Add New
-                        </button>
-                    </div>
-                    <div class="p-4 md:p-6">
-                        <p class="text-sm text-gray-600 mb-4">These items will be automatically added to your budget based on their 'Payment Type'.</p>
-                        <div class="space-y-2">
-                            ${(items || []).length === 0 ? '<p class="text-gray-500">No items in this template.</p>' : itemsHtml}
                         </div>
                     </div>
                 </div>
@@ -573,980 +621,815 @@
         }
         
         /**
-         * Renders the 3-month forecast view
-         * --- COMPREHENSIVELY REVISED ---
+         * Renders the main Expenses view (forms and lists).
          */
-        function renderForecastView() {
-            const forecastMonths = [];
-            let startingBalance = 0;
-
-            // --- 1. Calculate Current Month's Outcome ---
-            const { income, recurringExpenses, semiMonthlyExpenses, variableExpenses } = state.currentBudget;
-            
-            // Handle old data structures
-            const validRecurring = recurringExpenses || [];
-            const validSemiMonthly = semiMonthlyExpenses || [];
-            const validVariable = variableExpenses || [];
-
-            const actualIncome = (income.payout1.isPaid ? income.payout1.actual : 0) + (income.payout2.isPaid ? income.payout2.actual : 0);
-            const actualExpenses = 
-                [...validRecurring, ...validSemiMonthly].reduce((sum, item) => sum + (item.isPaid ? item.actual : 0), 0) +
-                validVariable.reduce((sum, item) => sum + (item.amount || 0), 0);
-            
-            // This is the cash on hand *right now*
-            startingBalance = actualIncome - actualExpenses; 
-
-            const remainingIncome = 
-                (income.payout1.isPaid ? 0 : income.payout1.expected) +
-                (income.payout2.isPaid ? 0 : income.payout2.expected);
-                
-            const remainingExpensesList = 
-                [...validRecurring, ...validSemiMonthly].filter(item => !item.isPaid);
-                
-            const remainingExpenses = remainingExpensesList.reduce((sum, item) => sum + (item.expected || 0), 0);
-
-            const thisMonthEndBalance = startingBalance + remainingIncome - remainingExpenses;
-            
-            // Get breakdown for current month
-            const currentMonthExpenseBreakdown = [
-                ...validRecurring.filter(item => item.isPaid).map(item => ({ name: item.name, amount: item.actual, isPaid: true })),
-                ...validSemiMonthly.filter(item => item.isPaid).map(item => ({ name: item.name, amount: item.actual, isPaid: true })),
-                ...validVariable.map(item => ({ name: item.name, amount: item.amount, isPaid: true })),
-                ...remainingExpensesList.map(item => ({ name: item.name, amount: item.expected, isPaid: false }))
-            ];
-            
-            forecastMonths.push({
-                month: state.currentMonthId,
-                start: 0, 
-                income: actualIncome + remainingIncome,
-                expenses: actualExpenses + remainingExpenses,
-                end: thisMonthEndBalance,
-                isCurrent: true,
-                expenseBreakdown: currentMonthExpenseBreakdown
-            });
-            
-            startingBalance = thisMonthEndBalance; // Set for next month's calculation
-
-            // --- 2. Calculate Next 3 Months ---
-            const safeSettings = {
-                avgPayout1: 19000,
-                avgPayout2: 19000,
-                recurringTemplate: [],
-                semiMonthlyExpensesTemplate: [],
-                ...state.settings,
-            };
-
-            const expectedMonthlyIncome = safeSettings.avgPayout1 + safeSettings.avgPayout2;
-            
-            const allTemplateExpenses = [
-                ...(safeSettings.recurringTemplate || []), 
-                ...(safeSettings.semiMonthlyExpensesTemplate || [])
-            ];
-
-            // --- FIX: Initialize monthId *before* the loop ---
-            let currentMonthId = state.currentMonthId; 
-            
-            for (let i = 0; i < 3; i++) {
-                // --- FIX: Increment monthId *inside* the loop ---
-                currentMonthId = getNextMonthId(currentMonthId); // Get NEXT month
-                
-                const futureExpenseBreakdown = [];
-                
-                // Calculate expenses specifically for *this* future month
-                const expectedMonthlyExpenses = allTemplateExpenses.reduce((sum, item) => {
-                    const itemPaymentType = item.paymentType || 'monthly'; // Default to monthly for old data
-                    if (itemPaymentType === 'monthly') {
-                        // For monthly items, check endTerm
-                        if (!item.endTerm || item.endTerm >= currentMonthId) {
-                             futureExpenseBreakdown.push({ name: item.name, amount: item.expected, isPaid: false });
-                             return sum + item.expected;
-                        }
-                    }
-                    if (itemPaymentType === 'oneTime' && item.dueMonth === currentMonthId) {
-                        futureExpenseBreakdown.push({ name: item.name, amount: item.expected, isPaid: false });
-                        return sum + item.expected; // Add one-time items *only* if they are due this month
-                    }
-                    return sum; // Otherwise, add nothing
-                }, 0);
-
-                const endBalance = startingBalance + expectedMonthlyIncome - expectedMonthlyExpenses;
-                
-                forecastMonths.push({
-                    month: currentMonthId,
-                    start: startingBalance,
-                    income: expectedMonthlyIncome,
-                    expenses: expectedMonthlyExpenses,
-                    end: endBalance,
-                    isCurrent: false,
-                    expenseBreakdown: futureExpenseBreakdown
-                });
-                startingBalance = endBalance;
-            }
-
-            // --- 3. Render the Cards ---
-            const statBox = (title, value, color) => `
-                <div class="p-4 bg-gray-50 rounded-lg">
-                    <h4 class="text-sm font-medium text-gray-500">${title}</h4>
-                    <p class="text-2xl font-bold ${color}">${value}</p>
-                </div>`;
-            
-            const renderExpenseBreakdown = (items) => {
-                if (items.length === 0) {
-                    return '<p class="text-xs text-gray-500">No expenses projected.</p>';
-                }
-                return items.map(item => `
-                    <div class="flex justify-between items-center text-xs ${item.isPaid ? 'text-gray-400' : 'text-gray-700'}">
-                        <span>${item.name} ${item.isPaid ? '(Paid)' : ''}</span>
-                        <span class="font-medium">${formatCurrency(item.amount)}</span>
-                    </div>
-                `).join('');
-            };
-            
-            const monthCards = forecastMonths.map(month => `
-                <div class="bg-white shadow-md rounded-lg overflow-hidden ${month.isCurrent ? 'border-blue-500 border-2' : ''}">
-                    <div class="p-4 md:p-6 border-b">
-                        <h3 class="text-xl font-semibold">${new Date(month.month + '-02').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
-                        ${month.isCurrent ? `<span class="text-xs font-medium text-blue-600">CURRENT MONTH (Projected)</span>` : ''}
-                    </div>
-                    <div class="p-4 md:p-6 space-y-4">
-                        ${!month.isCurrent ? statBox('Starting Balance', formatCurrency(month.start), 'text-gray-700') : ''}
-                        ${statBox('Projected Income', formatCurrency(month.income), 'text-green-600')}
-                        
-                        <!-- Revised Expense Box -->
-                        <div class="p-4 bg-gray-50 rounded-lg">
-                            <h4 class="text-sm font-medium text-gray-500">Projected Expenses</h4>
-                            <p class="text-2xl font-bold text-red-600">${formatCurrency(month.expenses)}</p>
-                            <div class="border-t my-2"></div>
-                            <div class="space-y-1 max-h-24 overflow-y-auto pr-1">
-                                ${renderExpenseBreakdown(month.expenseBreakdown)}
-                            </div>
+        function renderExpenses() {
+            return `
+                <div class="max-w-7xl mx-auto">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Manage Expenses</h1>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <!-- Left Column: Add Expense Form -->
+                        <div class="lg:col-span-1">
+                            ${renderAddExpenseForm()}
                         </div>
                         
-                        ${statBox('Projected End Balance', formatCurrency(month.end), month.end >= 0 ? 'text-blue-700' : 'text-red-700')}
-                    </div>
-                </div>
-            `).join('');
-
-            return `
-                <div class="space-y-6 no-print">
-                    <h2 class="text-3xl font-bold">3-Month Forecast</h2>
-                    <p class="text-gray-600">This forecast uses your average income and recurring expenses from your settings. It does not include 'Daily & Unplanned Expenses'.</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6">
-                        ${monthCards}
+                        <!-- Right Column: Expense Lists -->
+                        <div class="lg:col-span-2 space-y-8">
+                            ${renderMonthlyExpenses()}
+                            ${renderSemiMonthlyExpenses()}
+                            ${renderDailyExpenses()}
+                            ${renderUnplannedExpenses()}
+                        </div>
                     </div>
                 </div>
             `;
         }
         
-        /** NEW: Renders the reports view */
-        function renderReportsView() {
-            const getMonthOptions = () => {
-                let options = '';
-                const today = new Date();
-                for (let i = 0; i > -12; i--) { // Go back 12 months
-                    const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
-                    const monthId = getMonthId(date);
-                    const selected = monthId === state.currentMonthId ? 'selected' : '';
-                    const label = new Date(monthId + '-02').toLocaleString('default', { month: 'long', year: 'numeric' });
-                    options += `<option value="${monthId}" ${selected}>${label}</option>`;
-                }
-                return options;
-            };
-
+        /**
+         * Renders the "Add Expense" form.
+         */
+        function renderAddExpenseForm() {
+            // This HTML will be swapped out based on the dropdown
+            const formFields = `
+                <div id="dayOfMonthInput" class="hidden">
+                    <label for="expense-day" class="block text-sm font-medium text-gray-700 mb-1">Day of Month</label>
+                    <input type="number" id="expense-day" class="form-input" min="1" max="31">
+                </div>
+                
+                <!-- REVISION: Added two date fields for semi-monthly -->
+                <div id="semiMonthlyInputs" class="hidden space-y-3">
+                    <div>
+                        <label for="expense-day-1" class="block text-sm font-medium text-gray-700 mb-1">First Due Date (Day)</label>
+                        <input type="number" id="expense-day-1" class="form-input" min="1" max="31">
+                    </div>
+                    <div>
+                        <label for="expense-day-2" class="block text-sm font-medium text-gray-700 mb-1">Second Due Date (Day)</label>
+                        <input type="number" id="expense-day-2" class="form-input" min="1" max="31">
+                    </div>
+                </div>
+                
+                <div id="dateInput" class="hidden">
+                    <label for="expense-date" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input type="date" id="expense-date" class="form-input">
+                </div>
+            `;
+            
             return `
-                <div class="space-y-6 max-w-4xl mx-auto">
-                    <div class="flex justify-between items-center no-print">
-                        <h2 class="text-3xl font-bold">Reports</h2>
-                        <div class="flex space-x-2">
-                             <select id="report-month-select" class="p-2 border rounded-lg shadow-sm">
-                                ${getMonthOptions()}
+                <div class="card sticky top-8">
+                    <h2 class="text-xl font-bold mb-4">Add New Expense</h2>
+                    <form id="add-expense-form" class="space-y-4">
+                        <div>
+                            <label for="expense-name" class="block text-sm font-medium text-gray-700 mb-1">Expense Name</label>
+                            <input type="text" id="expense-name" class="form-input" required>
+                        </div>
+                        <div>
+                            <label for="expense-amount" class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                            <input type="number" id="expense-amount" class="form-input" step="0.01" required>
+                        </div>
+                        <div>
+                            <label for="expense-category" class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                            <input type="text" id="expense-category" class="form-input" required>
+                        </div>
+                        <div>
+                            <label for="expense-type" class="block text-sm font-medium text-gray-700 mb-1">Expense Type</label>
+                            <select id="expense-type" class="form-select">
+                                <option value="daily">Daily</option>
+                                <option value="unplanned">Unplanned</option>
+                                <option value="monthly">Monthly Bill</option>
+                                <option value="semiMonthly">Semi-Monthly Bill</option>
                             </select>
-                            <button id="print-report-button" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm flex items-center">
-                                ${icons.printer} Print / Download
-                            </button>
+                        </div>
+                        
+                        <div id="expense-type-fields">
+                            ${formFields}
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-full py-2.5">Add Expense</button>
+                    </form>
+                </div>
+            `;
+        }
+        
+        /**
+         * Renders the list of MONTHLY expenses.
+         * REVISION: Shows payment status and "Mark as Paid" button.
+         */
+        function renderMonthlyExpenses() {
+            const monthlyExpenses = state.budget.expenses.monthly || [];
+            const yearMonth = getCurrentYearMonth();
+            
+            const expenseItems = monthlyExpenses.map(expense => {
+                const paymentKey = yearMonth;
+                // Ensure payments object exists before accessing
+                const payment = (expense.payments && expense.payments[paymentKey]) ? expense.payments[paymentKey] : null;
+                
+                let paymentStatusHTML = '';
+                if (payment) {
+                    paymentStatusHTML = `
+                        <div class="text-sm text-green-700 font-medium">
+                            Paid on ${new Date(payment.paidOn).toLocaleDateString()}
+                        </div>
+                    `;
+                } else {
+                    paymentStatusHTML = `
+                        <button class="btn btn-success btn-sm mark-as-paid-btn" 
+                                data-id="${expense.id}" 
+                                data-type="monthly" 
+                                data-key="${paymentKey}" 
+                                data-amount="${expense.amount}">
+                            Mark as Paid
+                        </button>
+                    `;
+                }
+                
+                return `
+                    <li class="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 px-4 rounded-lg bg-gray-50 hover:bg-gray-100">
+                        <div class="flex-1 mb-2 sm:mb-0">
+                            <span class="font-medium text-gray-800">${expense.name}</span>
+                            <span class="block sm:inline sm:ml-2 text-sm text-gray-500">
+                                ${expense.category} - Due on day ${expense.dayOfMonth}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-4 w-full sm:w-auto">
+                             <span class="font-semibold text-lg text-gray-800">${formatCurrency(expense.amount)}</span>
+                             ${paymentStatusHTML}
+                        </div>
+                    </li>
+                `;
+            }).join('');
+            
+            return `
+                <div class="card">
+                    <h2 class="text-xl font-bold mb-4">Monthly Bills</h2>
+                    ${monthlyExpenses.length > 0 
+                        ? `<ul class="space-y-2">${expenseItems}</ul>` 
+                        : `<p class="text-gray-500">No monthly bills added yet.</p>`
+                    }
+                </div>
+            `;
+        }
+        
+        /**
+         * Renders the list of SEMI-MONTHLY expenses.
+         * REVISION: Shows two due dates and two payment statuses.
+         */
+        function renderSemiMonthlyExpenses() {
+            const semiMonthlyExpenses = state.budget.expenses.semiMonthly || [];
+            const yearMonth = getCurrentYearMonth();
+
+            const expenseItems = semiMonthlyExpenses.map(expense => {
+                // Payment 1
+                const paymentKey1 = `${yearMonth}-1`;
+                const payment1 = (expense.payments && expense.payments[paymentKey1]) ? expense.payments[paymentKey1] : null;
+                let paymentStatus1HTML = '';
+                if (payment1) {
+                    paymentStatus1HTML = `<span class="text-xs text-green-700 font-medium">Paid ${new Date(payment1.paidOn).toLocaleDateString()}</span>`;
+                } else {
+                    paymentStatus1HTML = `
+                        <button class="btn btn-success btn-sm mark-as-paid-btn" 
+                                data-id="${expense.id}" 
+                                data-type="semiMonthly" 
+                                data-key="${paymentKey1}" 
+                                data-amount="${expense.amount}">
+                            Pay
+                        </button>`;
+                }
+                
+                // Payment 2
+                const paymentKey2 = `${yearMonth}-2`;
+                const payment2 = (expense.payments && expense.payments[paymentKey2]) ? expense.payments[paymentKey2] : null;
+                let paymentStatus2HTML = '';
+                if (payment2) {
+                    paymentStatus2HTML = `<span class="text-xs text-green-700 font-medium">Paid ${new Date(payment2.paidOn).toLocaleDateString()}</span>`;
+                } else {
+                    paymentStatus2HTML = `
+                        <button class="btn btn-success btn-sm mark-as-paid-btn" 
+                                data-id="${expense.id}" 
+                                data-type="semiMonthly" 
+                                data-key="${paymentKey2}" 
+                                data-amount="${expense.amount}">
+                            Pay
+                        </button>`;
+                }
+
+                return `
+                    <li class="py-3 px-4 rounded-lg bg-gray-50 hover:bg-gray-100">
+                        <div class="flex justify-between items-center mb-2">
+                             <div>
+                                <span class="font-medium text-gray-800">${expense.name}</span>
+                                <span class="block sm:inline sm:ml-2 text-sm text-gray-500">${expense.category}</span>
+                            </div>
+                            <span class="font-semibold text-lg text-gray-800">${formatCurrency(expense.amount)} <span class="text-sm font-normal text-gray-500">(per payment)</span></span>
+                        </div>
+                        <div class="flex justify-between items-center gap-4 text-sm bg-white p-2 rounded">
+                            <div class="flex-1">
+                                <span class="text-gray-600">Due on day ${expense.dayOfMonth1}</span>
+                            </div>
+                            ${paymentStatus1HTML}
+                        </div>
+                         <div class="flex justify-between items-center gap-4 text-sm bg-white p-2 rounded mt-2">
+                            <div class="flex-1">
+                                <span class="text-gray-600">Due on day ${expense.dayOfMonth2}</span>
+                            </div>
+                            ${paymentStatus2HTML}
+                        </div>
+                    </li>
+                `;
+            }).join('');
+
+            return `
+                <div class="card">
+                    <h2 class="text-xl font-bold mb-4">Semi-Monthly Bills</h2>
+                    ${semiMonthlyExpenses.length > 0
+                        ? `<ul class="space-y-3">${expenseItems}</ul>`
+                        : `<p class="text-gray-500">No semi-monthly bills added yet.</p>`
+                    }
+                </div>
+            `;
+        }
+        
+        /**
+         * Renders the list of DAILY expenses for the current month.
+         * REVISION: Adds Edit and Delete buttons.
+         */
+        function renderDailyExpenses() {
+            const yearMonth = getCurrentYearMonth();
+            const dailyExpenses = state.budget.expenses.daily[yearMonth] || [];
+            
+            const expenseItems = dailyExpenses.map(expense => {
+                return `
+                    <li class="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 px-4 rounded-lg bg-gray-50 hover:bg-gray-100">
+                        <div class="flex-1 mb-2 sm:mb-0">
+                            <span class="font-medium text-gray-800">${expense.name}</span>
+                            <span class="block sm:inline sm:ml-2 text-sm text-gray-500">
+                                ${expense.category} - ${new Date(expense.date).toLocaleDateString()}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-2 w-full sm:w-auto">
+                             <span class="font-semibold text-lg text-gray-800">${formatCurrency(expense.amount)}</span>
+                             <button class="btn btn-warning btn-sm edit-expense-btn" 
+                                     data-id="${expense.id}" 
+                                     data-type="daily" 
+                                     data-month="${yearMonth}">
+                                 Edit
+                             </button>
+                             <button class="btn btn-danger btn-sm delete-expense-btn" 
+                                     data-id="${expense.id}" 
+                                     data-type="daily" 
+                                     data-month="${yearMonth}">
+                                 Delete
+                             </button>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+            
+            return `
+                <div class="card">
+                    <h2 class="text-xl font-bold mb-4">Daily Expenses (${getMonthYearString(state.currentDate)})</h2>
+                     ${dailyExpenses.length > 0 
+                        ? `<ul class="space-y-2">${expenseItems}</ul>` 
+                        : `<p class="text-gray-500">No daily expenses logged for this month.</p>`
+                    }
+                </div>
+            `;
+        }
+        
+        /**
+         * Renders the list of UNPLANNED expenses for the current month.
+         * REVISION: Adds Edit and Delete buttons.
+         */
+        function renderUnplannedExpenses() {
+            const yearMonth = getCurrentYearMonth();
+            const unplannedExpenses = state.budget.expenses.unplanned[yearMonth] || [];
+            
+            const expenseItems = unplannedExpenses.map(expense => {
+                return `
+                    <li class="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 px-4 rounded-lg bg-gray-50 hover:bg-gray-100">
+                        <div class="flex-1 mb-2 sm:mb-0">
+                            <span class="font-medium text-gray-800">${expense.name}</span>
+                            <span class="block sm:inline sm:ml-2 text-sm text-gray-500">
+                                ${expense.category} - ${new Date(expense.date).toLocaleDateString()}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-2 w-full sm:w-auto">
+                             <span class="font-semibold text-lg text-gray-800">${formatCurrency(expense.amount)}</span>
+                             <button class="btn btn-warning btn-sm edit-expense-btn" 
+                                     data-id="${expense.id}" 
+                                     data-type="unplanned" 
+                                     data-month="${yearMonth}">
+                                 Edit
+                             </button>
+                             <button class="btn btn-danger btn-sm delete-expense-btn" 
+                                     data-id="${expense.id}" 
+                                     data-type="unplanned" 
+                                     data-month="${yearMonth}">
+                                 Delete
+                             </button>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+            
+            return `
+                <div class="card">
+                    <h2 class="text-xl font-bold mb-4">Unplanned Expenses (${getMonthYearString(state.currentDate)})</h2>
+                     ${unplannedExpenses.length > 0 
+                        ? `<ul class="space-y-2">${expenseItems}</ul>` 
+                        : `<p class="text-gray-500">No unplanned expenses logged for this month.</p>`
+                    }
+                </div>
+            `;
+        }
+        
+        /**
+         * Renders the Report view.
+         */
+        function renderReport() {
+            const stats = calculateCurrentMonthStats();
+            
+            const printContent = `
+                <div id="report-print-area" class="p-8 bg-white">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-4">Financial Report</h1>
+                    <h2 class="text-xl text-gray-600 mb-8">${getMonthYearString(state.currentDate)}</h2>
+                    
+                    <div class="grid grid-cols-2 gap-6 mb-8">
+                        <div class="bg-gray-100 p-4 rounded-lg">
+                            <h3 class="text-sm font-medium text-gray-500">Total Income</h3>
+                            <p class="text-2xl font-bold text-green-600">${formatCurrency(stats.income)}</p>
+                        </div>
+                        <div class="bg-gray-100 p-4 rounded-lg">
+                            <h3 class="text-sm font-medium text-gray-500">Total Spent</h3>
+                            <p class="text-2xl font-bold text-red-600">${formatCurrency(stats.totalExpenses)}</p>
+                        </div>
+                         <div class="bg-gray-100 p-4 rounded-lg">
+                            <h3 class="text-sm font-medium text-gray-500">Remaining Balance</h3>
+                            <p class="text-2xl font-bold text-gray-800">${formatCurrency(stats.remainingBalance)}</p>
+                        </div>
+                        <div class="bg-gray-100 p-4 rounded-lg">
+                            <h3 class="text-sm font-medium text-gray-500">Pending Bills</h3>
+                            <p class="text-2xl font-bold text-yellow-600">${formatCurrency(stats.totalPending)}</p>
                         </div>
                     </div>
                     
-                    <div id="report-content" class="bg-white shadow-md rounded-lg p-8">
-                        <!-- Report content will be loaded here -->
-                        <p class="text-gray-500">Select a month to generate a report.</p>
+                    <h3 class="text-xl font-semibold mb-4">Expense Breakdown</h3>
+                    <ul class="space-y-2">
+                        <li>Paid Bills: <span class="font-medium">${formatCurrency(stats.totalPaid)}</span></li>
+                        <li>Daily Expenses: <span class="font-medium">${formatCurrency(stats.totalDaily)}</span></li>
+                        <li>Unplanned Expenses: <span class="font-medium">${formatCurrency(stats.totalUnplanned)}</span></li>
+                    </ul>
+                </div>
+            `;
+            
+            return `
+                <div class="max-w-7xl mx-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <h1 class="text-3xl font-bold text-gray-800">Monthly Report</h1>
+                        <button id="print-report-btn" class="btn btn-primary no-print">
+                            Print Report
+                        </button>
+                    </div>
+                    
+                    <div class="bg-white shadow-lg rounded-xl">
+                        ${printContent}
                     </div>
                 </div>
             `;
         }
         
-        /** NEW: Generates and renders the content for a report */
-        async function generateReport(monthId) {
-            const reportContentEl = document.getElementById('report-content');
-            reportContentEl.innerHTML = `<div class="text-center"><p>Loading report for ${monthId}...</p></div>`;
-
-            // Get the budget data for the selected month
-            const budgetRef = doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', monthId);
-            const docSnap = await getDoc(budgetRef);
-
-            if (!docSnap.exists()) {
-                reportContentEl.innerHTML = `<div class="text-center text-red-500"><p>No data found for ${monthId}.</p></div>`;
-                return;
-            }
-
-            const budget = docSnap.data();
-            const { income, recurringExpenses, semiMonthlyExpenses, variableExpenses } = budget;
-
-            // Handle old data structures
-            const validRecurring = recurringExpenses || [];
-            const validSemiMonthly = semiMonthlyExpenses || [];
-            const validVariable = variableExpenses || [];
-            const safeSettings = { payout1Label: 'Payout 1', payout2Label: 'Payout 2', ...state.settings };
-
-            // --- Calculations ---
-            const totalIncome = (income.payout1.isPaid ? income.payout1.actual : 0) + (income.payout2.isPaid ? income.payout2.actual : 0);
-            
-            const totalRecurring = validRecurring
-                .filter(item => item.isPaid)
-                .reduce((sum, item) => sum + item.actual, 0);
-                
-            const totalSemiMonthly = validSemiMonthly // Renamed
-                .filter(item => item.isPaid)
-                .reduce((sum, item) => sum + item.actual, 0);
-                
-            const totalVariable = validVariable.reduce((sum, item) => sum + item.amount, 0);
-            
-            const totalExpenses = totalRecurring + totalSemiMonthly + totalVariable; // Updated
-            const netIncome = totalIncome - totalExpenses;
-
-            // --- Table Builders ---
-            const renderRow = (label, value) => `
-                <tr class="border-b">
-                    <td class="py-2 pr-4 text-gray-600">${label}</td>
-                    <td class="py-2 text-right font-medium">${formatCurrency(value)}</td>
-                </tr>`;
-            
-            const renderHeaderRow = (label, value) => `
-                <tr class="border-t-2 border-b">
-                    <td class="py-2 pr-4 font-bold">${label}</td>
-                    <td class="py-2 text-right font-bold">${formatCurrency(value)}</td>
-                </tr>`;
-            
-            const renderFinalRow = (label, value) => `
-                <tr class="border-t-2 border-b-2 border-gray-800 bg-gray-100">
-                    <td class="py-2 pr-4 font-bold text-lg">${label}</td>
-                    <td class="py-2 text-right font-bold text-lg ${value >= 0 ? 'text-green-700' : 'text-red-700'}">${formatCurrency(value)}</td>
-                </tr>`;
-
-            // --- HTML Structure ---
-            reportContentEl.innerHTML = `
-                <div id="report-print-area">
-                    <h3 class="text-2xl font-bold text-center">Statement of Income & Expenses</h3>
-                    <p class="text-center text-gray-500 mb-6">${new Date(monthId + '-02').toLocaleString('default', { month: 'long', year: 'numeric' })}</p>
-                    
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr>
-                                <th class="text-left text-lg font-semibold text-gray-800 pb-2" colspan="2">Income</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${(income.payout1.isPaid ? renderRow(safeSettings.payout1Label, income.payout1.actual) : '')}
-                            ${(income.payout2.isPaid ? renderRow(safeSettings.payout2Label, income.payout2.actual) : '')}
-                            ${renderHeaderRow('Total Income', totalIncome)}
-                        </tbody>
-                    </table>
-                    
-                    <table class="w-full text-sm mt-6">
-                        <thead>
-                            <tr>
-                                <th class="text-left text-lg font-semibold text-gray-800 pb-2" colspan="2">Expenses</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr class="font-medium bg-gray-50"><td class="py-1 px-2" colspan="2">Fixed Monthly Expenses</td></tr>
-                            ${validRecurring.filter(i => i.isPaid).map(item => renderRow(item.name, item.actual)).join('')}
-                            <tr class="border-t"><td class="py-1 pr-4 text-gray-600 font-semibold text-right">Subtotal</td><td class="py-1 text-right font-semibold">${formatCurrency(totalRecurring)}</td></tr>
-                            
-                            <tr class="font-medium bg-gray-50"><td class="py-1 px-2 mt-2" colspan="2">Semi-Monthly Expenses</td></tr>
-                            ${validSemiMonthly.filter(i => i.isPaid).map(item => renderRow(item.name, item.actual)).join('')}
-                            <tr class="border-t"><td class="py-1 pr-4 text-gray-600 font-semibold text-right">Subtotal</td><td class="py-1 text-right font-semibold">${formatCurrency(totalSemiMonthly)}</td></tr>
-
-                            <tr class="font-medium bg-gray-50"><td class="py-1 px-2 mt-2" colspan="2">Daily & Unplanned Expenses</td></tr>
-                            ${validVariable.map(item => renderRow(item.name, item.amount)).join('')}
-                            <tr class="border-t"><td class="py-1 pr-4 text-gray-600 font-semibold text-right">Subtotal</td><td class="py-1 text-right font-semibold">${formatCurrency(totalVariable)}</td></tr>
-                            
-                            ${renderHeaderRow('Total Expenses', totalExpenses)}
-                        </tbody>
-                    </table>
-                    
-                    <table class="w-full text-sm mt-6">
-                        <tbody>
-                            ${renderFinalRow('Net Income / Loss', netIncome)}
-                        </tbody>
-                    </table>
+        /**
+         * Renders the Settings view.
+         */
+        function renderSettings() {
+            return `
+                <div class="max-w-xl mx-auto">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Settings</h1>
+                    <div class="card">
+                        <form id="settings-form" class="space-y-4">
+                            <div>
+                                <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                                <input type="text" id="username" class="form-input" value="${state.settings.username}" required>
+                            </div>
+                            <div>
+                                <label for="currency" class="block text-sm font-medium text-gray-700 mb-1">Currency Code (e.g., USD, PHP)</label>
+                                <input type="text" id="currency" class="form-input" value="${state.settings.currency}" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary py-2.5">Save Settings</button>
+                        </form>
+                    </div>
                 </div>
             `;
         }
-
-
-        // --- Event Handlers ---
         
-        /** Attaches listeners for navigation */
-        function attachNavListeners() {
-            document.querySelectorAll('.nav-button').forEach(btn => {
-                btn.onclick = (e) => {
-                    state.view = e.currentTarget.dataset.view;
+        
+        // --- EVENT HANDLERS ---
+        
+        /**
+         * Adds all global event listeners for the app.
+         */
+        function addAppEventListeners() {
+            // Navigation
+            document.querySelectorAll(".nav-link").forEach(link => {
+                link.addEventListener("click", (e) => {
+                    state.currentView = e.target.dataset.view;
                     renderApp();
-                };
+                });
             });
-            document.getElementById('sign-out-button').onclick = async () => {
-                try {
-                    await signOut(auth);
-                    // onAuthStateChanged will handle the redirect to login
-                    console.log("User signed out.");
-                } catch (error) {
-                    console.error("Error signing out:", error);
-                }
-            };
-        }
 
-        /** Attaches listeners for the main content area */
-        function attachMainListeners() {
-            if (state.view === 'tracker') {
-                document.getElementById('month-select').onchange = (e) => {
-                    state.currentMonthId = e.target.value;
-                    state.currentBudget = null; // Force reload
-                    state.loading = true;
-                    // Detach old listener and setup new one
-                    state.unsubBudget();
-                    setupBudgetListener(state.currentMonthId);
-                    renderApp(); // Show loading
-                };
+            // Dashboard Listeners
+            if (state.currentView === 'dashboard') {
+                document.getElementById("prev-month-btn")?.addEventListener("click", handlePrevMonth);
+                document.getElementById("next-month-btn")?.addEventListener("click", handleNextMonth);
+                document.getElementById("edit-income-btn")?.addEventListener("click", () => {
+                    document.getElementById("edit-income-form").classList.remove("hidden");
+                });
+                document.getElementById("cancel-income-btn")?.addEventListener("click", () => {
+                     document.getElementById("edit-income-form").classList.add("hidden");
+                });
+                document.getElementById("save-income-btn")?.addEventListener("click", handleSaveIncome);
+            }
+            
+            // Expenses View Listeners
+            if (state.currentView === 'expenses') {
+                document.getElementById("expense-type")?.addEventListener("change", handleExpenseTypeChange);
+                document.getElementById("add-expense-form")?.addEventListener("submit", handleAddExpense);
                 
-                document.querySelectorAll('.payout-edit').forEach(btn => {
-                    btn.onclick = (e) => showPayoutModal(e.currentTarget.dataset.payoutKey);
+                // REVISION: Add listeners for new buttons
+                document.querySelectorAll(".mark-as-paid-btn").forEach(btn => {
+                   btn.addEventListener("click", handleMarkAsPaid);
                 });
-                document.querySelectorAll('.payout-unpay').forEach(btn => {
-                    btn.onclick = (e) => handlePayoutUnpay(e.currentTarget.dataset.payoutKey);
+                document.querySelectorAll(".edit-expense-btn").forEach(btn => {
+                   btn.addEventListener("click", showEditExpenseModal);
                 });
-
-                document.querySelectorAll('.expense-edit').forEach(btn => {
-                    btn.onclick = (e) => showExpenseModal(e.currentTarget.dataset.key, e.currentTarget.dataset.index);
+                document.querySelectorAll(".delete-expense-btn").forEach(btn => {
+                   btn.addEventListener("click", showDeleteConfirm);
                 });
-                document.querySelectorAll('.expense-unpay').forEach(btn => {
-                    btn.onclick = (e) => handleExpenseUnpay(e.currentTarget.dataset.key, e.currentTarget.dataset.index);
-                });
-                
-                document.getElementById('variable-expense-form').onsubmit = handleVariableSave;
-                document.querySelectorAll('.variable-delete').forEach(btn => {
-                    btn.onclick = (e) => handleVariableDelete(e.currentTarget.dataset.id);
-                });
-
-            } else if (state.view === 'settings') {
-                document.getElementById('save-income-settings').onclick = handleIncomeSettingsSave;
-                
-                document.querySelectorAll('.template-add').forEach(btn => {
-                    btn.onclick = (e) => handleTemplateAdd(e.currentTarget.dataset.key, e.currentTarget.dataset.isFixed === 'true');
-                });
-                document.querySelectorAll('.template-edit').forEach(btn => {
-                    btn.onclick = (e) => handleTemplateEdit(e.currentTarget.dataset.key, e.currentTarget.dataset.id, e.currentTarget.dataset.isFixed === 'true');
-                });
-                document.querySelectorAll('.template-delete').forEach(btn => {
-                    btn.onclick = (e) => handleTemplateDelete(e.currentTarget.dataset.key, e.currentTarget.dataset.id);
-                });
-            } else if (state.view === 'reports') {
-                const reportMonthSelect = document.getElementById('report-month-select');
-                reportMonthSelect.onchange = (e) => generateReport(e.target.value);
-                // Auto-load report for the default selected month
-                generateReport(reportMonthSelect.value);
-                
-                document.getElementById('print-report-button').onclick = () => {
+            }
+            
+            // Report View Listeners
+            if (state.currentView === 'report') {
+                document.getElementById("print-report-btn")?.addEventListener("click", () => {
                     window.print();
-                };
+                });
+            }
+            
+            // Settings View Listeners
+            if (state.currentView === 'settings') {
+                document.getElementById("settings-form")?.addEventListener("submit", handleSaveSettings);
             }
         }
         
-        /** NEW: Handles Google Sign-In */
-        async function handleGoogleSignIn() {
-            try {
-                // This will open the Google sign-in popup
-                const result = await signInWithPopup(auth, googleProvider);
-                // onAuthStateChanged will handle the successful login
-                console.log("Signed in with Google:", result.user.uid);
-            } catch (error) {
-                console.error("Error during Google sign-in popup:", error);
-                
-                // Handle common errors
-                if (error.code === 'auth/popup-closed-by-user') {
-                    // User closed the popup, do nothing
-                    return;
-                }
-                if (error.code === 'auth/unauthorized-domain') {
-                    // This is a common setup error
-                    appRoot.innerHTML = `<div class="p-8 text-center text-red-600 no-print">
-                        <h2 class="text-2xl font-bold">Sign-In Error</h2>
-                        <p class="mt-2">This domain is not authorized to sign in. You must add it to the Firebase console.</p>
-                        <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
-                            <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
-                                <li>Go to your Firebase project console.</li>
-                                <li>Click on <strong>Build > Authentication</strong>.</li>
-                                <li>Click the <strong>Settings</strong> tab.</li>
-                                <li>Under <strong>Authorized domains</strong>, click <strong>Add domain</strong>.</li>
-                                <li>Add this domain: <code>${window.location.hostname}</code></li>
-                                <li>Click <strong>Add</strong>.</li>
-                            </ol>
-                        </p>
-                    </div>`;
-                    return;
-                }
-                
-                // Show a generic error for other issues
-                appRoot.innerHTML = `<div class="p-8 text-center text-red-600 no-print">
-                        <h2 class="text-2xl font-bold">Sign-In Error</h2>
-                        <p class="mt-2">${error.message}</p>
-                        <p class="mt-4 text-sm text-gray-700">Please try again. Make sure popups are enabled for this site.</p>
-                    </div>`;
+        // --- Modal Event Handlers ---
+        
+        /**
+         * Adds event listeners for the modals (which are always in the DOM).
+         */
+        function addModalEventListeners() {
+            // Edit Expense Modal
+            document.getElementById("cancel-edit-btn")?.addEventListener("click", () => {
+                editExpenseModal.classList.add("hidden");
+            });
+            document.getElementById("edit-expense-form")?.addEventListener("submit", handleUpdateExpense);
+            
+            // Delete Confirm Modal
+            document.getElementById("cancel-delete-btn")?.addEventListener("click", () => {
+                confirmDeleteModal.classList.add("hidden");
+            });
+            document.getElementById("confirm-delete-btn")?.addEventListener("click", handleDeleteExpense);
+        }
+        
+        // --- Handler Implementations ---
+
+        function handlePrevMonth() {
+            state.currentDate.setMonth(state.currentDate.getMonth() - 1);
+            renderApp();
+        }
+        
+        function handleNextMonth() {
+            state.currentDate.setMonth(state.currentDate.getMonth() + 1);
+            renderApp();
+        }
+        
+        function handleSaveIncome(e) {
+            const newIncome = parseFloat(document.getElementById("income-input").value);
+            if (!isNaN(newIncome) && newIncome >= 0) {
+                const yearMonth = getCurrentYearMonth();
+                state.budget.income[yearMonth] = newIncome;
+                saveBudget(); // This will trigger a re-render via onSnapshot
+                document.getElementById("edit-income-form").classList.add("hidden");
             }
         }
 
-        // --- Data Logic (Saving/Updating) ---
+        function handleExpenseTypeChange(e) {
+            const type = e.target.value;
+            const dayInput = document.getElementById("dayOfMonthInput");
+            const semiInput = document.getElementById("semiMonthlyInputs");
+            const dateInput = document.getElementById("dateInput");
+            
+            dayInput.classList.add("hidden");
+            semiInput.classList.add("hidden");
+            dateInput.classList.add("hidden");
+            
+            if (type === 'monthly') {
+                dayInput.classList.remove("hidden");
+            } else if (type === 'semiMonthly') {
+                semiInput.classList.remove("hidden");
+            } else if (type === 'daily' || type === 'unplanned') {
+                dateInput.classList.remove("hidden");
+                // Default to today's date
+                document.getElementById("expense-date").valueAsDate = new Date();
+            }
+        }
         
-        /** Save payout modal form */
-        async function handlePayoutSave(e) {
+        function handleAddExpense(e) {
             e.preventDefault();
-            const payoutKey = e.target.dataset.key;
-            const amount = Number(document.getElementById('modal-amount').value);
+            const form = e.target;
+            const name = form.elements['expense-name'].value;
+            const amount = parseFloat(form.elements['expense-amount'].value);
+            const category = form.elements['expense-category'].value;
+            const type = form.elements['expense-type'].value;
             
-            const updatedBudget = {
-                ...state.currentBudget,
-                income: {
-                    ...state.currentBudget.income,
-                    [payoutKey]: {
-                        ...state.currentBudget.income[payoutKey],
-                        actual: amount,
-                        isPaid: true,
-                    }
-                }
-            };
-            
-            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), updatedBudget);
-            hideModal();
-        }
-
-        /** Mark payout as unpaid */
-        async function handlePayoutUnpay(payoutKey) {
-             const updatedBudget = {
-                ...state.currentBudget,
-                income: {
-                    ...state.currentBudget.income,
-                    [payoutKey]: {
-                        ...state.currentBudget.income[payoutKey],
-                        actual: 0,
-                        isPaid: false,
-                    }
-                }
-            };
-            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), updatedBudget);
-        }
-
-        /** Save expense modal form */
-        async function handleExpenseSave(e) {
-            e.preventDefault();
-            const { key, index } = e.target.dataset;
-            const amount = Number(document.getElementById('modal-amount').value);
-            
-            const updatedExpenses = [...(state.currentBudget[key] || [])];
-            updatedExpenses[index] = {
-                ...updatedExpenses[index],
-                actual: amount,
-                isPaid: true,
-            };
-            
-            const updatedBudget = { ...state.currentBudget, [key]: updatedExpenses };
-            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), updatedBudget);
-            hideModal();
-        }
-
-        /** Mark expense as unpaid */
-        async function handleExpenseUnpay(key, index) {
-            const updatedExpenses = [...(state.currentBudget[key] || [])];
-            updatedExpenses[index] = {
-                ...updatedExpenses[index],
-                actual: 0,
-                isPaid: false,
-            };
-            const updatedBudget = { ...state.currentBudget, [key]: updatedExpenses };
-            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), updatedBudget);
-        }
-
-        /** Save new variable expense */
-        async function handleVariableSave(e) {
-            e.preventDefault();
-            const name = document.getElementById('variable-name').value;
-            const amount = Number(document.getElementById('variable-amount').value);
-            if (!name || !amount) return;
-
-            const newExpense = {
-                id: `var-${new Date().getTime()}`,
+            const newExpenseBase = {
+                id: crypto.randomUUID(),
                 name,
                 amount,
-                date: new Date().toISOString(),
-            };
-
-            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), {
-                variableExpenses: arrayUnion(newExpense)
-            });
-            document.getElementById('variable-name').value = '';
-            document.getElementById('variable-amount').value = '';
-        }
-
-        /** Delete variable expense */
-        async function handleVariableDelete(id) {
-            const itemToDelete = (state.currentBudget.variableExpenses || []).find(item => item.id === id);
-            if (itemToDelete) {
-                await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', state.currentMonthId), {
-                    variableExpenses: arrayRemove(itemToDelete)
-                });
-            }
-        }
-
-        /** Save income settings */
-        async function handleIncomeSettingsSave() {
-            const payout1 = Number(document.getElementById('setting-payout1').value);
-            const payout2 = Number(document.getElementById('setting-payout2').value);
-            const payout1Label = document.getElementById('setting-payout1-label').value;
-            const payout2Label = document.getElementById('setting-payout2-label').value;
-            
-            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main'), {
-                avgPayout1: payout1,
-                avgPayout2: payout2,
-                payout1Label: payout1Label,
-                payout2Label: payout2Label
-            });
-        }
-        
-        /** Show template add modal */
-        function handleTemplateAdd(key, isFixedExpense) {
-            const newItem = {
-                id: `tpl-${new Date().getTime()}`,
-                name: "",
-                expected: 0,
-                paymentType: 'monthly', // Default to monthly
-                dueMonth: '',
-                monthlyDueDate: '', // Always include the key
-                endTerm: '', // Always include the key
-            };
-            showTemplateModal(key, newItem, true, isFixedExpense);
-        }
-        
-        /** Show template edit modal */
-        function handleTemplateEdit(key, id, isFixedExpense) {
-            const item = (state.settings[key] || []).find(i => i.id === id);
-            showTemplateModal(key, item, false, isFixedExpense);
-        }
-
-        /** Save template modal form */
-        async function handleTemplateSave(e) {
-            e.preventDefault();
-            const { key, id, isNew, isFixed } = e.target.dataset;
-            const isFixedExpense = isFixed === 'true';
-
-            const updatedItem = {
-                id: id,
-                name: document.getElementById('template-name').value,
-                expected: Number(document.getElementById('template-expected').value),
-                paymentType: document.getElementById('template-payment-type').value,
-                dueMonth: document.getElementById('template-due-month')?.value || '',
-                monthlyDueDate: document.getElementById('template-due-date')?.value || '',
-                endTerm: document.getElementById('template-end-term')?.value || '',
+                category
             };
             
-            let currentItems = state.settings[key] || [];
-            let updatedItems;
-            if (isNew === 'true') {
-                updatedItems = [...currentItems, updatedItem];
-            } else {
-                updatedItems = currentItems.map(i => i.id === id ? updatedItem : i);
-            }
-            
-            await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main'), {
-                [key]: updatedItems
-            });
-            hideModal();
-        }
-
-        /** Delete template item */
-        async function handleTemplateDelete(key, id) {
-            // A custom modal would be better than confirm().
-            const customModalContent = `
-                <h3 class="text-lg font-medium mb-4">Confirm Deletion</h3>
-                <p class="text-sm text-gray-600 mb-4">Are you sure you want to delete this template? This will not affect past budgets.</p>
-                <div class="flex justify-end space-x-2 mt-4">
-                    <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
-                    <button type="button" id="modal-confirm-delete" class="font-medium rounded-lg transition-colors bg-red-600 text-white hover:bg-red-700 px-4 py-2 text-sm">Delete</button>
-                </div>
-            `;
-            showModal(customModalContent);
-
-            document.getElementById('modal-cancel').onclick = hideModal;
-            document.getElementById('modal-confirm-delete').onclick = async () => {
-                const itemToDelete = (state.settings[key] || []).find(i => i.id === id);
-                if (itemToDelete) {
-                    await updateDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main'), {
-                        [key]: arrayRemove(itemToDelete)
+            try {
+                if (type === 'monthly') {
+                    const dayOfMonth = parseInt(form.elements['expense-day'].value);
+                    if (isNaN(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
+                        throw new Error("Invalid day of month.");
+                    }
+                    state.budget.expenses.monthly.push({
+                        ...newExpenseBase,
+                        dayOfMonth,
+                        payments: {} // REVISION: Initialize payments map
+                    });
+                    
+                } else if (type === 'semiMonthly') {
+                    // REVISION: Handle two due dates
+                    const dayOfMonth1 = parseInt(form.elements['expense-day-1'].value);
+                    const dayOfMonth2 = parseInt(form.elements['expense-day-2'].value);
+                    if (isNaN(dayOfMonth1) || isNaN(dayOfMonth2) || dayOfMonth1 < 1 || dayOfMonth1 > 31 || dayOfMonth2 < 1 || dayOfMonth2 > 31) {
+                        throw new Error("Invalid semi-monthly due dates.");
+                    }
+                    state.budget.expenses.semiMonthly.push({
+                        ...newExpenseBase,
+                        dayOfMonth1,
+                        dayOfMonth2,
+                        payments: {} // REVISION: Initialize payments map
+                    });
+                    
+                } else if (type === 'daily' || type === 'unplanned') {
+                    const date = form.elements['expense-date'].value;
+                    if (!date) {
+                         throw new Error("Please select a date.");
+                    }
+                    const yearMonth = date.slice(0, 7);
+                    
+                    // Ensure the array for this month exists
+                    if (!state.budget.expenses[type][yearMonth]) {
+                        state.budget.expenses[type][yearMonth] = [];
+                    }
+                    
+                    state.budget.expenses[type][yearMonth].push({
+                        ...newExpenseBase,
+                        date: date // Store full date string
                     });
                 }
-                hideModal();
-            };
+                
+                saveBudget(); // Save the updated budget
+                form.reset(); // Clear the form
+                // Manually trigger the form field visibility logic
+                handleExpenseTypeChange({ target: { value: 'daily' } });
+                
+            } catch (error) {
+                console.error("Error adding expense:", error.message);
+                // Here you would show an error to the user
+                // For now, we'll just log it
+            }
         }
         
-        // --- Modal & Form Logic (The missing functions) ---
-
-        /** Shows the modal with specific content */
-        function showModal(content) {
-            modalContent.innerHTML = content;
-            modalContainer.classList.remove('hidden');
-        }
-
-        /** Hides the modal */
-        function hideModal() {
-            modalContent.innerHTML = '';
-            modalContainer.classList.add('hidden');
+        function handleSaveSettings(e) {
+            e.preventDefault();
+            state.settings.username = document.getElementById("username").value;
+            state.settings.currency = document.getElementById("currency").value.toUpperCase();
+            saveSettings(); // This will save and trigger a re-render
+            
+            // --- FIX: Replaced alert() with a non-blocking message ---
+            const btn = e.target.querySelector('button[type="submit"]');
+            const originalText = btn.textContent;
+            btn.textContent = "Saved!";
+            btn.classList.add('bg-green-600', 'text-white');
+            btn.classList.remove('bg-blue-600');
+            
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.classList.add('bg-blue-600');
+                btn.classList.remove('bg-green-600');
+            }, 2000);
+            // --- End of Fix ---
         }
         
-        /** Shows the form for editing an income payout */
-        function showPayoutModal(payoutKey) {
-            const payout = state.currentBudget.income[payoutKey];
-            const title = payoutKey === 'payout1' ? (state.settings.payout1Label || 'Payout 1') : (state.settings.payout2Label || 'Payout 2');
-            const amount = payout.isPaid ? payout.actual : payout.expected;
+        /**
+         * REVISION: Handles marking a bill as paid.
+         */
+        function handleMarkAsPaid(e) {
+            const { id, type, key, amount } = e.target.dataset;
             
-            const content = `
-                <form id="payout-modal-form" data-key="${payoutKey}">
-                    <h3 class="text-lg font-medium mb-4">Edit Payout</h3>
-                    <p class="text-sm text-gray-600 mb-4">Enter the actual amount received for ${title}.</p>
-                    <label class="block text-sm font-medium mb-1">Actual Amount</label>
-                    <input type="number" id="modal-amount" value="${amount}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                    <div class="flex justify-end space-x-2 mt-4">
-                        <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
-                        <button type="submit" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save</button>
-                    </div>
-                </form>
-            `;
-            showModal(content);
-            document.getElementById('modal-cancel').onclick = hideModal;
-            document.getElementById('payout-modal-form').onsubmit = handlePayoutSave;
-        }
-
-        /** Shows the form for editing a recurring expense */
-        function showExpenseModal(expenseKey, index) {
-            const item = state.currentBudget[expenseKey][index];
-            const amount = item.isPaid ? item.actual : item.expected;
+            const expenseList = state.budget.expenses[type];
+            const expense = expenseList.find(exp => exp.id === id);
             
-            const content = `
-                <form id="expense-modal-form" data-key="${expenseKey}" data-index="${index}">
-                    <h3 class="text-lg font-medium mb-4">Pay Expense</h3>
-                    <p class="text-sm text-gray-600 mb-4">Enter the actual amount paid for ${item.name}.</p>
-                    <label class="block text-sm font-medium mb-1">Actual Amount</label>
-                    <input type="number" id="modal-amount" value="${amount}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                    <div class="flex justify-end space-x-2 mt-4">
-                        <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
-                        <button type="submit" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save Payment</button>
-                    </div>
-                </form>
-            `;
-            showModal(content);
-            document.getElementById('modal-cancel').onclick = hideModal;
-            document.getElementById('expense-modal-form').onsubmit = handleExpenseSave;
-        }
-
-        /** Shows the form for adding/editing a template item */
-        function showTemplateModal(key, item, isNew = false, isFixedExpense = false) {
-            const title = isNew ? 'Add New' : 'Edit';
-            
-            // This local state will track the selected payment type to show/hide fields
-            let currentPaymentType = item.paymentType || 'monthly';
-            
-            const getModalContent = (paymentType) => `
-                <form id="template-modal-form" data-key="${key}" data-id="${item.id}" data-is-new="${isNew}" data-is-fixed="${isFixedExpense}">
-                    <h3 class="text-lg font-medium mb-4">${title} Item</h3>
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium mb-1">Name</label>
-                            <input type="text" id="template-name" value="${item.name || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-1">Expected Amount (Monthly Due)</label>
-                            <input type="number" id="template-expected" value="${item.expected || 0}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" required />
-                        </div>
-                        
-                        <!-- NEW: Payment Type Selector -->
-                        <div>
-                            <label class="block text-sm font-medium mb-1">Payment Type</label>
-                            <select id="template-payment-type" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <option value="monthly" ${paymentType === 'monthly' ? 'selected' : ''}>Monthly Bill</option>
-                                <option value="oneTime" ${paymentType === 'oneTime' ? 'selected' : ''}>One-Time Expense</option>
-                            </select>
-                        </div>
-
-                        <!-- Conditional fields for "Monthly Bill" -->
-                        <div id="monthly-fields" class="${paymentType === 'monthly' ? '' : 'hidden'} space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium mb-1">Monthly Due Date (e.g., "15th")</label>
-                                <input type="text" id="template-due-date" value="${item.monthlyDueDate || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                            </div>
-                            ${isFixedExpense ? `
-                            <div>
-                                <label class="block text-sm font-medium mb-1">End Term (Optional)</label>
-                                <input type="month" id="template-end-term" value="${item.endTerm || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                            </div>
-                            ` : ''}
-                        </div>
-                        
-                        <!-- Conditional fields for "One-Time Expense" -->
-                        <div id="one-time-fields" class="${paymentType === 'oneTime' ? '' : 'hidden'}">
-                            <div>
-                                <label class="block text-sm font-medium mb-1">Due Month (YYYY-MM)</label>
-                                <input type="month" id="template-due-month" value="${item.dueMonth || ''}" class="border border-gray-300 rounded-lg p-2 text-sm w-full focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex justify-end space-x-2 mt-6">
-                        <button type="button" id="modal-cancel" class="font-medium rounded-lg transition-colors bg-transparent text-gray-700 hover:bg-gray-100 px-4 py-2 text-sm">Cancel</button>
-                        <button type="submit" class="font-medium rounded-lg transition-colors bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 text-sm">Save</button>
-                    </div>
-                </form>
-            `;
-            
-            showModal(getModalContent(currentPaymentType));
-            
-            // Add listener to re-render modal on type change
-            document.getElementById('template-payment-type').onchange = (e) => {
-                const newPaymentType = e.target.value;
-                // Preserve form data
-                const preservedData = {
-                    name: document.getElementById('template-name').value,
-                    expected: Number(document.getElementById('template-expected').value),
-                    paymentType: newPaymentType,
-                    monthlyDueDate: document.getElementById('template-due-date')?.value || item.monthlyDueDate,
-                    endTerm: document.getElementById('template-end-term')?.value || item.endTerm,
-                    dueMonth: document.getElementById('template-due-month')?.value || item.dueMonth,
+            if (expense) {
+                if (!expense.payments) {
+                    expense.payments = {};
+                }
+                
+                // Add the payment record
+                expense.payments[key] = {
+                    paidOn: new Date().toISOString(),
+                    amount: parseFloat(amount)
                 };
                 
-                // Re-render modal with new view
-                showModal(getModalContent(newPaymentType)); 
-                
-                // Re-populate preserved data
-                document.getElementById('template-name').value = preservedData.name;
-                document.getElementById('template-expected').value = preservedData.expected;
-                document.getElementById('template-payment-type').value = preservedData.paymentType;
-                if (document.getElementById('template-due-date')) {
-                    document.getElementById('template-due-date').value = preservedData.monthlyDueDate;
-                }
-                 if (document.getElementById('template-end-term')) {
-                    document.getElementById('template-end-term').value = preservedData.endTerm;
-                }
-                 if (document.getElementById('template-due-month')) {
-                    document.getElementById('template-due-month').value = preservedData.dueMonth;
-                }
-
-                // Re-attach listeners after re-render
-                document.getElementById('modal-cancel').onclick = hideModal;
-                document.getElementById('template-modal-form').onsubmit = handleTemplateSave;
-                document.getElementById('template-payment-type').onchange = arguments.callee; // Re-attach self
-            };
-
-            document.getElementById('modal-cancel').onclick = hideModal;
-            document.getElementById('template-modal-form').onsubmit = handleTemplateSave;
+                saveBudget(); // Save the change
+            } else {
+                console.error("Could not find expense to mark as paid:", id);
+            }
         }
-
-        // --- Initialization ---
-
-        /** Creates a new budget doc for the month based on settings */
-        async function createNewMonthBudget(monthId, settingsDoc) {
+        
+        /**
+         * REVISION: Shows the modal to edit a daily/unplanned expense.
+         */
+        function showEditExpenseModal(e) {
+            const { id, type, month } = e.target.dataset;
             
-            const safeSettings = {
-                avgPayout1: 19000,
-                avgPayout2: 19000,
-                payout1Label: "Payout 1 (10th)",
-                payout2Label: "Payout 2 (25th)",
-                recurringTemplate: [],
-                semiMonthlyExpensesTemplate: [],
-                ...settingsDoc,
-            };
-
-            const allTemplateExpenses = [
-                ...(safeSettings.recurringTemplate || []), 
-                ...(safeSettings.semiMonthlyExpensesTemplate || [])
-            ];
+            const expense = state.budget.expenses[type][month]?.find(exp => exp.id === id);
             
-            const newExpenses = allTemplateExpenses
-                .filter(item => {
-                    const itemPaymentType = item.paymentType || 'monthly';
-                    if (itemPaymentType === 'monthly') {
-                        // Include monthly items, unless their endTerm has passed
-                        return !item.endTerm || item.endTerm >= monthId;
+            if (expense) {
+                // Populate the modal form
+                document.getElementById("edit-expense-id").value = id;
+                document.getElementById("edit-expense-type").value = type;
+                document.getElementById("edit-expense-month").value = month;
+                document.getElementById("edit-expense-name").value = expense.name;
+                document.getElementById("edit-expense-amount").value = expense.amount;
+                document.getElementById("edit-expense-date").value = expense.date;
+                
+                // Show the modal
+                editExpenseModal.classList.remove("hidden");
+            } else {
+                console.error("Could not find expense to edit:", id);
+            }
+        }
+        
+        /**
+         * REVISION: Saves the changes from the edit modal.
+         */
+        function handleUpdateExpense(e) {
+            e.preventDefault();
+            
+            // Get data from the hidden fields
+            const id = document.getElementById("edit-expense-id").value;
+            const type = document.getElementById("edit-expense-type").value;
+            const month = document.getElementById("edit-expense-month").value;
+            
+            // Get new values
+            const name = document.getElementById("edit-expense-name").value;
+            const amount = parseFloat(document.getElementById("edit-expense-amount").value);
+            const date = document.getElementById("edit-expense-date").value;
+            
+            const expenseList = state.budget.expenses[type][month];
+            const expenseIndex = expenseList?.findIndex(exp => exp.id === id);
+            
+            if (expenseIndex !== -1 && expenseList) {
+                // Update the expense in the state
+                expenseList[expenseIndex] = {
+                    ...expenseList[expenseIndex],
+                    name,
+                    amount,
+                    date
+                };
+                
+                // Check if the month changed
+                const newMonth = date.slice(0, 7);
+                if (newMonth !== month) {
+                    // Remove from old month
+                    const [movedExpense] = expenseList.splice(expenseIndex, 1);
+                    // Add to new month
+                    if (!state.budget.expenses[type][newMonth]) {
+                         state.budget.expenses[type][newMonth] = [];
                     }
-                    if (itemPaymentType === 'oneTime') {
-                        // Include one-time items *only* if they are due this month
-                        return item.dueMonth === monthId;
-                    }
-                    return false;
-                })
-                .map(item => ({ ...item, actual: 0, isPaid: false }));
-
-            // Separate them back out
-            const newRecurring = newExpenses.filter(item => (safeSettings.recurringTemplate || []).some(t => t.id === item.id));
-            const newSemiMonthly = newExpenses.filter(item => (safeSettings.semiMonthlyExpensesTemplate || []).some(t => t.id === item.id));
-
-            const newBudget = {
-                month: monthId,
-                income: {
-                    payout1: { expected: safeSettings.avgPayout1, actual: 0, isPaid: false },
-                    payout2: { expected: safeSettings.avgPayout2, actual: 0, isPaid: false },
-                },
-                recurringExpenses: newRecurring,
-                semiMonthlyExpenses: newSemiMonthly,
-                variableExpenses: [],
-            };
-            
-            try {
-                // Set the new budget
-                await setDoc(doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', monthId), newBudget);
-                // The onSnapshot listener will then pick it up
-            } catch (error)
-            {
-                // This is the OTHER likely error: Firestore rules not set to 'test mode'
-                console.error("Error creating new month budget:", error);
-                if (error.code === 'permission-denied') {
-                    // ** FIX: Explicitly stop loading and show error **
-                    state.loading = false; 
-                    // We can't renderApp() here as it might not be fully initialized
-                    appRoot.innerHTML = `<div class="p-8 text-center text-red-600 no-print">
-                        <h2 class="text-2xl font-bold">Database Error</h2>
-                        <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
-                        <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
-                            <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
-                                <li>Go to your Firebase project console.</li>
-                                <li>Click on <strong>Build > Firestore Database</strong>.</li>
-                                <li>Click the <strong>Rules</strong> tab.</li>
-                                <li>Change the line <code>allow read, write: if false;</code> to <code>allow read, write: if true;</code></li>
-                                <li>Click <strong>Publish</strong>.</li>
-                            </ol>
-                        </p>
-                    </div>`;
+                    state.budget.expenses[type][newMonth].push(movedExpense);
                 }
+                
+                saveBudget();
+                editExpenseModal.classList.add("hidden");
+            } else {
+                console.error("Error updating expense:", id);
+            }
+        }
+        
+        /**
+         * REVISION: Shows the confirm deletion modal.
+         */
+        function showDeleteConfirm(e) {
+            const { id, type, month } = e.target.dataset;
+            
+            // Store data on the confirm button
+            const confirmBtn = document.getElementById("confirm-delete-btn");
+            confirmBtn.dataset.id = id;
+            confirmBtn.dataset.type = type;
+            confirmBtn.dataset.month = month;
+            
+            // Show the modal
+            confirmDeleteModal.classList.remove("hidden");
+        }
+        
+        /**
+         * REVISION: Handles the actual deletion after confirmation.
+         */
+        function handleDeleteExpense(e) {
+            const { id, type, month } = e.target.dataset;
+            
+            const expenseList = state.budget.expenses[type][month];
+            const expenseIndex = expenseList?.findIndex(exp => exp.id === id);
+
+            if (expenseIndex !== -1 && expenseList) {
+                // Remove the expense from the array
+                expenseList.splice(expenseIndex, 1);
+                
+                saveBudget();
+                confirmDeleteModal.classList.add("hidden");
+            } else {
+                console.error("Error deleting expense:", id);
             }
         }
 
-        /** Sets up the listener for the current month's budget */
-        function setupBudgetListener(monthId) {
-            state.unsubBudget(); // Unsubscribe from old budget
-            const budgetRef = doc(db, 'artifacts', appId, 'users', state.userId, 'budgets', monthId);
-            
-            state.unsubBudget = onSnapshot(budgetRef, async (docSnap) => {
-                if (docSnap.exists()) {
-                    state.currentBudget = docSnap.data();
-                    state.loading = false;
-                    renderApp();
-                } else {
-                    // If budget doesn't exist, and settings are loaded, create new budget
-                    if (state.settings) {
-                        await createNewMonthBudget(monthId, state.settings);
-                    }
-                    // else: we're still waiting for settings, do nothing
-                }
-            }, (error) => {
-                // Handle snapshot errors (likely permission denied)
-                console.error("Error listening to budget:", error);
-                if (error.code === 'permission-denied') {
-                     // ** FIX: Explicitly stop loading and show error **
-                    state.loading = false;
-                    renderApp(); // This will call renderApp, which will see loading=false and auth=true, but will fail
-                    // This error is critical and should take over the screen.
-                    appRoot.innerHTML = `<div class="p-8 text-center text-red-600 no-print">
-                        <h2 class="text-2xl font-bold">Database Error</h2>
-                        <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
-                        <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
-                            <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
-                                <li>Go to your Firebase project console.</li>
-                                <li>Click on <strong>Build > Firestore Database</strong>.</li>
-                                <li>Click the <strong>Rules</strong> tab.</li>
-                                <li>Change the line <code>allow read, write: if false;</code> to <code>allow read, write: if true;</code></li>
-                                <li>Click <strong>Publish</strong>.</li>
-                            </ol>
-                        </p>
-                    </div>`;
-                }
-            });
-        }
-        
-        /** Attaches listeners for data (Settings and Budget) */
-        function attachDataListeners() {
-            // 1. Setup settings listener
-            const settingsRef = doc(db, 'artifacts', appId, 'users', state.userId, 'settings', 'main');
-            state.unsubSettings = onSnapshot(settingsRef, async (docSnap) => {
-                let currentSettings;
-                if (docSnap.exists()) {
-                    currentSettings = docSnap.data();
-                } else {
-                    // Create default settings
-                    const defaultSettings = {
-                        avgPayout1: 19000,
-                        avgPayout2: 19000,
-                        payout1Label: "Payout 1 (10th)",
-                        payout2Label: "Payout 2 (25th)",
-                        recurringTemplate: [],
-                        semiMonthlyExpensesTemplate: [], // Renamed
-                    };
-                    await setDoc(settingsRef, defaultSettings);
-                    currentSettings = defaultSettings;
-                }
-                
-                // Migrate old data if necessary
-                if (currentSettings.flexibleLoansTemplate) {
-                    currentSettings.semiMonthlyExpensesTemplate = currentSettings.flexibleLoansTemplate;
-                    delete currentSettings.flexibleLoansTemplate;
-                    // Save the migrated data
-                    await setDoc(settingsRef, currentSettings);
-                }
-                
-                state.settings = currentSettings;
 
-                // Once settings are loaded, setup budget listener
-                setupBudgetListener(state.currentMonthId);
-            }, (error) => {
-                // Handle settings snapshot errors (likely permission denied)
-                console.error("Error listening to settings:", error);
-                if (error.code === 'permission-denied') {
-                     // ** FIX: Explicitly stop loading and show error **
-                    state.loading = false;
-                    renderApp(); // This will call renderApp, which will see loading=false and auth=true, but will fail
-                    // This error is critical and should take over the screen.
-                    appRoot.innerHTML = `<div class="p-8 text-center text-red-600 no-print">
-                        <h2 class="text-2xl font-bold">Database Error</h2>
-                        <p class="mt-2">Permission denied. You need to enable <strong>Test Mode</strong> in your Firestore database.</p>
-                        <p class="mt-4 text-sm text-gray-700"><strong>How to fix:</strong>
-                            <ol class="text-left list-decimal list-inside mt-2 max-w-lg mx-auto">
-                                <li>Go to your Firebase project console.</li>
-                                <li>Click on <strong>Build > Firestore Database</strong>.</li>
-                                <li>Click the <strong>Rules</strong> tab.</li>
-                                <li>Change the line <code>allow read, write: if false;</code> to <code>allow read, write: if true;</code></li>
-                                <li>Click <strong>Publish</strong>.</li>
-                            </ol>
-                        </p>
-                    </div>`;
-                }
-            });
-        }
+        // --- APPLICATION INITIALIZATION ---
 
-        /** Initializes the application */
+        /**
+         * Main function to start the app.
+         */
         async function main() {
-            renderApp(); // Show initial loading screen
+            // Check for Firebase config
+            if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+                console.error("Firebase config is missing.");
+                appRoot.innerHTML = `<div class="p-8 text-center text-red-600">
+                    <h2 class="text-2xl font-bold">Firebase Config Missing</h2>
+                    <p class=mt-2>The application cannot start.</p>
+                </div>`;
+                return;
+            }
             
+            // Show loading screen
+            renderApp();
+
             try {
-                app = initializeApp(firebaseConfig);
-                analytics = getAnalytics(app);
-                auth = getAuth(app);
-                db = getFirestore(app);
-                googleProvider = new GoogleAuthProvider(); // Initialize Google provider
+                // Parse config
+                const firebaseConfig = JSON.parse(__firebase_config);
                 
-                onAuthStateChanged(auth, async (user) => {
+                // Initialize Firebase
+                state.app = initializeApp(firebaseConfig);
+                state.db = getFirestore(state.app);
+                state.auth = getAuth(state.app);
+                
+                // Enable debug logging for Firestore
+                setLogLevel('Debug');
+                
+                // Add modal listeners once
+                addModalEventListeners();
+                
+                // --- REVISED: Listen for Google login button ---
+                appRoot.addEventListener("click", async (e) => {
+                    // Find the button if clicked inside the SVG
+                    const googleBtn = e.target.closest('#google-login-btn');
+                    if (googleBtn) {
+                        try {
+                            state.loading = true;
+                            renderApp();
+                            
+                            // Check for platform token first (if it exists)
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await signInWithCustomToken(state.auth, __initial_auth_token);
+                            } else {
+                                // Fallback: Use Google Sign-in Popup
+                                const provider = new GoogleAuthProvider();
+                                await signInWithPopup(state.auth, provider);
+                            }
+                        } catch (error) {
+                            console.error("Sign-in failed:", error);
+                            state.loading = false;
+                            renderApp();
+                        }
+                    }
+                });
+
+                // --- Auth State ---
+                // This is the main entry point for the app logic
+                onAuthStateChanged(state.auth, (user) => {
                     if (user) {
                         // User is signed in!
                         state.userId = user.uid;
@@ -1588,4 +1471,3 @@
     </script>
 </body>
 </html>
-
