@@ -96,27 +96,27 @@
 
         // --- GLOBAL STATE & CONFIG ---
 
-        // Get Firebase config from global scope (injected by the platform)
-        let firebaseConfig;
-        try {
-            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-            if (!firebaseConfig.apiKey) {
-                throw new Error("Firebase config not found or invalid.");
-            }
-        } catch (e) {
-            console.error("Failed to parse Firebase config:", e);
-            document.getElementById('app-root').innerHTML = `<div class="p-4 text-red-700 bg-red-100 rounded-md"><strong>Error:</strong> Firebase configuration is missing or invalid. Please provide a valid \`__firebase_config\` JSON.</div>`;
-            // Stop execution if config is bad
-            // REMOVED: return; -- This was causing the "Illegal return statement" error
-        }
-
+        // Your web app's Firebase configuration
+        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+        const firebaseConfig = {
+          apiKey: "AIzaSyDllC4nXTDgtMMfw6CO0t92j820SOY7MPQ",
+          authDomain: "my-budget-tracker-23b15.firebaseapp.com",
+          databaseURL: "https://my-budget-tracker-23b15-default-rtdb.asia-southeast1.firebasedatabase.app",
+          projectId: "my-budget-tracker-23b15",
+          storageBucket: "my-budget-tracker-23b15.firebasestorage.app",
+          messagingSenderId: "341614311933",
+          appId: "1:341614311933:web:32b48db5576be8d7fb0194",
+          measurementId: "G-44L5LDN7MW"
+        };
+        
+        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
         const analytics = getAnalytics(app);
 
-        // Get App ID from global scope
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // Get App ID from the config
+        const appId = firebaseConfig.appId;
 
         // Main application state
         const state = {
