@@ -1608,31 +1608,17 @@
                         
                         attachDataListeners(); // This will fetch data and render the app
                         
-                    } else if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        // If no user, but an initial token exists, try to sign in with it
-                        try {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                            // The onAuthStateChanged listener will fire again with the user
-                        } catch (tokenError) {
-                            console.error("Custom token sign-in error:", tokenError);
-                            // Fallback to anonymous
-                            await signInAnonymously(auth);
-                        }
                     } else {
-                        // No user, no token, sign in anonymously for this session
-                        try {
-                             await signInAnonymously(auth);
-                             // The onAuthStateChanged listener will fire again with the user
-                        } catch (anonError) {
-                            console.error("Anonymous sign-in error:", anonError);
-                             // If even anonymous fails, show login screen
-                            state.userId = null;
-                            state.isAuthReady = false; // Set to false to force login screen
-                            state.loading = false;
-                            state.unsubSettings();
-                            state.unsubBudget();
-                            renderApp(); // This will call renderLoginScreen()
-                        }
+                        // User is signed out!
+                        state.userId = null;
+                        state.isAuthReady = false;
+                        state.loading = false;
+                        
+                        // Detach listeners
+                        state.unsubSettings();
+                        state.unsubBudget();
+
+                        renderApp(); // This will call renderLoginScreen()
                     }
                 });
 
