@@ -115,8 +115,8 @@
         const db = getFirestore(app);
         const analytics = getAnalytics(app);
 
-        // Get App ID from the config
-        const appId = firebaseConfig.appId;
+        // Get App ID from the config - Use projectId for database paths
+        const appId = firebaseConfig.projectId;
 
         // Main application state
         const state = {
